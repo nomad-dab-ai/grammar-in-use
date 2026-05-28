@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+audio_segments.json
+setup_segments.py
+split_audio.py
+match_clips.py

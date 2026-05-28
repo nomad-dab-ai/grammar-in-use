@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grammar in Use Practice</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Grammar in Use</h1>
+  <p class="subtitle">반복 학습 연습장</p>
+</header>
+
+<nav class="tab-nav">
+  <button class="tab-btn active" data-tab="audio">
+    <span class="tab-icon">🎵</span>
+    <span>쉐도잉 연습</span>
+  </button>
+  <button class="tab-btn" data-tab="recall">
+    <span class="tab-icon">💭</span>
+    <span>영어 떠올리기</span>
+  </button>
+  <button class="tab-btn" data-tab="blank">
+    <span class="tab-icon">✏️</span>
+    <span>빈칸 채우기</span>
+  </button>
+</nav>
+
+<main class="app-main">
+
+  <!-- ───── TAB 1 : 음원 듣기 ───── -->
+  <section id="tab-audio" class="tab-section active">
+
+    <div class="filter-bar">
+      <div class="grammar-selector">
+        <button class="grammar-sel-btn" id="audio-grammar-btn">전체 문법 ▾</button>
+        <div class="grammar-panel" id="audio-grammar-panel">
+          <label class="grammar-item grammar-all">
+            <input type="checkbox" id="audio-chk-all">
+            <span>전체 선택</span>
+          </label>
+          <div id="audio-grammar-list"></div>
+        </div>
+      </div>
+      <label class="shuffle-toggle">
+        <input type="checkbox" id="audio-shuffle">
+        <span>🔀 랜덤</span>
+      </label>
+    </div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-text">
+        <span id="audio-curr">0</span> / <span id="audio-total">0</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="audio-fill"></div>
+      </div>
+    </div>
+
+    <div class="card audio-card">
+      <div class="category-badge" id="audio-badge">—</div>
+
+      <div class="audio-play-row">
+        <button class="btn-listen" id="btn-listen" disabled>▶ 문장 듣기</button>
+        <div class="audio-status" id="audio-status"></div>
+      </div>
+
+      <audio id="audio-player"></audio>
+
+      <button class="btn-reveal" id="btn-audio-reveal">정답 보기</button>
+
+      <div class="english-reveal" id="audio-reveal">
+        <div class="korean-text" id="audio-korean"></div>
+        <div class="english-text" id="audio-english"></div>
+      </div>
+    </div>
+
+    <div class="nav-buttons">
+      <button class="btn-nav" id="btn-audio-prev">◀ 이전</button>
+      <button class="btn-nav btn-primary" id="btn-audio-next">다음 ▶</button>
+    </div>
+
+  </section>
+
+
+  <!-- ───── TAB 2 : 영어 떠올리기 ───── -->
+  <section id="tab-recall" class="tab-section">
+
+    <div class="filter-bar">
+      <div class="grammar-selector">
+        <button class="grammar-sel-btn" id="recall-grammar-btn">전체 문법 ▾</button>
+        <div class="grammar-panel" id="recall-grammar-panel">
+          <label class="grammar-item grammar-all">
+            <input type="checkbox" id="recall-chk-all">
+            <span>전체 선택</span>
+          </label>
+          <div id="recall-grammar-list"></div>
+        </div>
+      </div>
+      <label class="shuffle-toggle">
+        <input type="checkbox" id="recall-shuffle">
+        <span>🔀 랜덤</span>
+      </label>
+    </div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-text">
+        <span id="recall-curr">0</span> / <span id="recall-total">0</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="recall-fill"></div>
+      </div>
+    </div>
+
+    <div class="card recall-card">
+      <div class="category-badge" id="recall-badge">—</div>
+      <div class="korean-text" id="recall-korean">로딩 중…</div>
+
+      <button class="btn-reveal" id="btn-reveal">정답 보기</button>
+
+      <div class="english-reveal" id="recall-reveal">
+        <div class="english-text" id="recall-english"></div>
+      </div>
+    </div>
+
+    <div class="nav-buttons">
+      <button class="btn-nav" id="btn-recall-prev">◀ 이전</button>
+      <button class="btn-nav btn-primary" id="btn-recall-next">다음 ▶</button>
+    </div>
+
+  </section>
+
+
+  <!-- ───── TAB 3 : 빈칸 채우기 ───── -->
+  <section id="tab-blank" class="tab-section">
+
+    <div class="filter-bar">
+      <div class="grammar-selector">
+        <button class="grammar-sel-btn" id="blank-grammar-btn">전체 문법 ▾</button>
+        <div class="grammar-panel" id="blank-grammar-panel">
+          <label class="grammar-item grammar-all">
+            <input type="checkbox" id="blank-chk-all">
+            <span>전체 선택</span>
+          </label>
+          <div id="blank-grammar-list"></div>
+        </div>
+      </div>
+      <button class="btn-reshuffle" id="btn-reshuffle" title="다시 섞기">🔀</button>
+    </div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-text">
+        <span id="blank-curr">0</span> / <span id="blank-total">0</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="blank-fill"></div>
+      </div>
+    </div>
+
+    <div class="card blank-card">
+      <div class="category-badge" id="blank-badge">—</div>
+      <div class="korean-text" id="blank-korean">로딩 중…</div>
+
+      <div class="blank-sentence-wrap" id="blank-sentence"></div>
+
+      <div class="blank-actions">
+        <button class="btn-primary" id="btn-check">확인하기</button>
+        <button class="btn-secondary" id="btn-show-ans" style="display:none">정답 보기</button>
+      </div>
+
+      <div class="blank-result" id="blank-result"></div>
+    </div>
+
+    <div class="nav-buttons">
+      <button class="btn-nav" id="btn-blank-prev">◀ 이전</button>
+      <button class="btn-nav btn-primary" id="btn-blank-next">다음 ▶</button>
+    </div>
+
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
