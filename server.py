@@ -30,8 +30,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._json(self._sentences())
         elif path == '/api/clips':
             self._serve_json_file('clips_mapping.json')
-        elif path.startswith('/clip/'):
-            self._clip(path[6:])
+        elif path.startswith('/clips/'):
+            self._clip(path[7:])
         else:
             fname = 'index.html' if path in ('/', '') else path.lstrip('/')
             self._static(os.path.join(WEB_DIR, fname))

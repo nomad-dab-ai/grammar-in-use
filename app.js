@@ -175,7 +175,7 @@ function playClip(clipPath) {
     btn.textContent = '⏸ 정지';
     btn.classList.add('playing');
 
-    const url = '/clip/' + clipPath.split('/').map(encodeURIComponent).join('/');
+    const url = '/clips/' + clipPath.split('/').map(encodeURIComponent).join('/');
     p.src = url;
     p.load();
     p.play().catch(() => {
@@ -274,7 +274,7 @@ function initRecall() {
             const clip = getClip(s);
             if (clip) {
                 const p   = $('audio-player');
-                const url = '/clip/' + clip.split('/').map(encodeURIComponent).join('/');
+                const url = '/clips/' + clip.split('/').map(encodeURIComponent).join('/');
                 p.src = url;
                 p.load();
                 p.play().catch(() => {});
