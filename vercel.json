@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "routes": [
-    { "src": "/api/sentences", "dest": "/api/sentences.py" },
-    { "src": "/api/clips",     "dest": "/api/clips.py" },
-    { "handle": "filesystem" },
-    { "src": "/.*",            "dest": "/index.html" }
-  ]
-}
