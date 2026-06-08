@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>관리자 — Grammar in Use</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<header class="admin-header">
+  <h1>관리자 페이지</h1>
+  <a href="/" class="btn-back">← 메인으로</a>
+</header>
+
+<div class="admin-layout">
+
+  <aside class="sidebar">
+    <div class="sidebar-title">문법 선택</div>
+    <div id="grammar-list"></div>
+  </aside>
+
+  <main class="main-content">
+    <div class="content-header">
+      <h2 id="grammar-title">문법을 선택하세요</h2>
+      <div class="header-actions">
+        <div class="settings-group">
+          <input type="password" id="api-key-input" class="api-key-input" placeholder="ElevenLabs API 키">
+          <button id="btn-save-key" class="btn-sm">저장</button>
+          <span id="key-status"></span>
+        </div>
+        <div class="settings-group">
+          <select id="voice-select" class="voice-select">
+            <option value="">목소리 선택</option>
+          </select>
+          <button id="btn-load-voices" class="btn-sm">🔄 불러오기</button>
+        </div>
+        <button id="btn-save" class="btn-save" disabled>💾 저장</button>
+        <span id="save-msg"></span>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="sentences-table">
+        <thead>
+          <tr>
+            <th class="col-num">#</th>
+            <th class="col-korean">한국어</th>
+            <th class="col-english">영어</th>
+            <th class="col-clip">음원</th>
+          </tr>
+        </thead>
+        <tbody id="sentences-body">
+          <tr><td colspan="4" class="empty-msg">왼쪽에서 문법을 선택하세요.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+
+</div>
+
+<audio id="preview-player"></audio>
+
+<script src="admin.js"></script>
+</body>
+</html>

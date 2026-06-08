@@ -5,3 +5,4 @@ audio_segments.json
 setup_segments.py
 split_audio.py
 match_clips.py
+config.json

@@ -4,13 +4,17 @@ import http.server
 import json
 import os
 import csv
+import re
+import base64
 import urllib.parse
 import socketserver
 
-WEB_DIR   = os.path.dirname(os.path.abspath(__file__))
-CLIPS_DIR = os.path.join(WEB_DIR, "clips")
-CSV_FILE  = os.path.join(WEB_DIR, "data", "문법별_예문_정리.csv")
-PORT      = int(os.environ.get('PORT', 8080))
+WEB_DIR       = os.path.dirname(os.path.abspath(__file__))
+CLIPS_DIR     = os.path.join(WEB_DIR, "clips")
+CSV_FILE      = os.path.join(WEB_DIR, "data", "문법별_예문_정리.csv")
+PORT          = int(os.environ.get('PORT', 8080))
+CLIPS_MAPPING = os.path.join(WEB_DIR, 'clips_mapping.json')
+CONFIG_FILE   = os.path.join(WEB_DIR, 'config.json')
 
 MIME = {
     '.html': 'text/html; charset=utf-8',
@@ -32,9 +36,212 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._serve_json_file('clips_mapping.json')
         elif path.startswith('/clips/'):
             self._clip(path[7:])
+        elif path in ('/admin', '/admin.html'):
+            self._static(os.path.join(WEB_DIR, 'admin.html'))
+        elif path == '/api/admin/config':
+            self._get_config()
+        elif path == '/api/admin/elevenlabs-voices':
+            self._elevenlabs_voices()
         else:
             fname = 'index.html' if path in ('/', '') else path.lstrip('/')
             self._static(os.path.join(WEB_DIR, fname))
+
+    def do_PUT(self):
+        path = urllib.parse.unquote(self.path.split('?')[0])
+        if path == '/api/admin/sentences':
+            self._update_sentences()
+        else:
+            self.send_response(404); self.end_headers()
+
+    def do_POST(self):
+        path = urllib.parse.unquote(self.path.split('?')[0])
+        if path == '/api/admin/upload-clip':
+            self._upload_clip()
+        elif path == '/api/admin/generate-clip':
+            self._generate_clip()
+        elif path == '/api/admin/config':
+            self._save_config()
+        else:
+            self.send_response(404); self.end_headers()
+
+    def _update_sentences(self):
+        try:
+            length = int(self.headers.get('Content-Length', 0))
+            data   = json.loads(self.rfile.read(length).decode('utf-8'))
+            with open(CSV_FILE, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['문법', '번호', '한국어', '영어'])
+                for s in data:
+                    writer.writerow([s['grammar'], s['number'], s['korean'], s['english']])
+            self._json({'ok': True})
+        except Exception as e:
+            self._json({'ok': False, 'error': str(e)})
+
+    def _load_config(self):
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, encoding='utf-8') as f:
+                return json.load(f)
+        return {}
+
+    def _get_config(self):
+        cfg = self._load_config()
+        key = cfg.get('elevenlabs_api_key', '')
+        self._json({'elevenlabs_api_key': ('*' * 8 + key[-4:]) if len(key) > 4 else ('*' * len(key))})
+
+    def _save_config(self):
+        try:
+            length  = int(self.headers.get('Content-Length', 0))
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+            cfg = self._load_config()
+            if 'elevenlabs_api_key' in payload:
+                cfg['elevenlabs_api_key'] = payload['elevenlabs_api_key']
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(cfg, f, indent=2)
+            self._json({'ok': True})
+        except Exception as e:
+            self._json({'ok': False, 'error': str(e)})
+
+    def _elevenlabs_voices(self):
+        import urllib.request, urllib.error
+        try:
+            cfg = self._load_config()
+            api_key = cfg.get('elevenlabs_api_key', '')
+            if not api_key:
+                self._json({'ok': False, 'error': 'API 키 없음'}); return
+            req = urllib.request.Request('https://api.elevenlabs.io/v1/voices')
+            req.add_header('xi-api-key', api_key)
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = json.loads(r.read())
+            voices = [{'id': v['voice_id'], 'name': v['name'], 'labels': v.get('labels', {})}
+                      for v in data.get('voices', [])]
+            voices.sort(key=lambda v: v['name'])
+            self._json({'ok': True, 'voices': voices})
+        except Exception as e:
+            self._json({'ok': False, 'error': str(e)})
+
+    def _generate_clip(self):
+        import urllib.request, urllib.error, subprocess, tempfile
+        try:
+            length  = int(self.headers.get('Content-Length', 0))
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+            grammar  = payload['grammar']
+            number   = str(payload['number'])
+            text     = payload['text']
+            voice    = payload.get('voice', '')
+            use_el   = payload.get('elevenlabs', False)
+
+            # A:/B: 레이블 제거
+            clean_lines = [re.sub(r'^[A-Z]:\s*', '', l) for l in text.splitlines() if l.strip()]
+            clean_text  = ' '.join(clean_lines)
+
+            sentences     = self._sentences()
+            grammar_sents = [s for s in sentences if s['grammar'] == grammar]
+            idx           = next((i for i, s in enumerate(grammar_sents) if s['number'] == number), None)
+            if idx is None:
+                self._json({'ok': False, 'error': '문장을 찾을 수 없음'}); return
+
+            with open(CLIPS_MAPPING) as f:
+                clips = json.load(f)
+            grammar_clips = clips.get(grammar, [])
+
+            # 저장 경로 결정
+            if idx < len(grammar_clips) and grammar_clips[idx]:
+                base    = os.path.splitext(grammar_clips[idx])[0]
+                rel_out = base + ('.mp3' if use_el else '.m4a')
+            else:
+                slug    = re.sub(r'[^\w]', '_', grammar).strip('_')
+                ext     = '.mp3' if use_el else '.m4a'
+                os.makedirs(os.path.join(CLIPS_DIR, 'generated'), exist_ok=True)
+                rel_out = f'generated/{slug}_{number.zfill(3)}{ext}'
+
+            out_path = os.path.join(CLIPS_DIR, rel_out.replace('/', os.sep))
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+            if use_el:
+                cfg     = self._load_config()
+                api_key = cfg.get('elevenlabs_api_key', '')
+                if not api_key:
+                    self._json({'ok': False, 'error': 'ElevenLabs API 키가 없어요'}); return
+
+                body = json.dumps({
+                    'text': clean_text,
+                    'model_id': 'eleven_multilingual_v2',
+                    'voice_settings': {'stability': 0.5, 'similarity_boost': 0.75}
+                }).encode('utf-8')
+                req = urllib.request.Request(
+                    f'https://api.elevenlabs.io/v1/text-to-speech/{voice}',
+                    data=body, method='POST'
+                )
+                req.add_header('xi-api-key', api_key)
+                req.add_header('Content-Type', 'application/json')
+                req.add_header('Accept', 'audio/mpeg')
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    audio_bytes = r.read()
+                with open(out_path, 'wb') as f:
+                    f.write(audio_bytes)
+            else:
+                tts_text = ' [[slnc 600]] '.join(clean_lines)
+                with tempfile.NamedTemporaryFile(suffix='.aiff', delete=False) as tmp:
+                    tmp_path = tmp.name
+                try:
+                    subprocess.run(['say', '-v', voice, '-o', tmp_path, tts_text], check=True)
+                    subprocess.run(['afconvert', tmp_path, '-f', 'mp4f', '-d', 'aac', out_path], check=True)
+                finally:
+                    if os.path.exists(tmp_path):
+                        os.unlink(tmp_path)
+
+            while len(grammar_clips) <= idx:
+                grammar_clips.append(None)
+            grammar_clips[idx] = rel_out
+            clips[grammar] = grammar_clips
+            with open(CLIPS_MAPPING, 'w') as f:
+                json.dump(clips, f, ensure_ascii=False, indent=2)
+
+            self._json({'ok': True, 'path': rel_out})
+        except Exception as e:
+            self._json({'ok': False, 'error': str(e)})
+
+    def _upload_clip(self):
+        try:
+            length  = int(self.headers.get('Content-Length', 0))
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+            grammar = payload['grammar']
+            number  = str(payload['number'])
+            mp3     = base64.b64decode(payload['data'])
+
+            sentences        = self._sentences()
+            grammar_sents    = [s for s in sentences if s['grammar'] == grammar]
+            idx              = next((i for i, s in enumerate(grammar_sents) if s['number'] == number), None)
+            if idx is None:
+                self._json({'ok': False, 'error': '문장을 찾을 수 없음'}); return
+
+            with open(CLIPS_MAPPING) as f:
+                clips = json.load(f)
+            grammar_clips = clips.get(grammar, [])
+
+            if idx < len(grammar_clips) and grammar_clips[idx]:
+                rel_path  = grammar_clips[idx]
+                file_path = os.path.join(CLIPS_DIR, rel_path.replace('/', os.sep))
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            else:
+                slug      = re.sub(r'[^\w]', '_', grammar).strip('_')
+                folder    = os.path.join(CLIPS_DIR, slug)
+                os.makedirs(folder, exist_ok=True)
+                filename  = f'{slug}_{number.zfill(3)}.mp3'
+                file_path = os.path.join(folder, filename)
+                rel_path  = f'{slug}/{filename}'
+                while len(grammar_clips) <= idx:
+                    grammar_clips.append(None)
+                grammar_clips[idx] = rel_path
+                clips[grammar] = grammar_clips
+                with open(CLIPS_MAPPING, 'w') as f:
+                    json.dump(clips, f, ensure_ascii=False, indent=2)
+
+            with open(file_path, 'wb') as f:
+                f.write(mp3)
+            self._json({'ok': True, 'path': rel_path})
+        except Exception as e:
+            self._json({'ok': False, 'error': str(e)})
 
     def _sentences(self):
         rows = []

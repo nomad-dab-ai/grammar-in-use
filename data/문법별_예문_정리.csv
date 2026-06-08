@@ -7,7 +7,7 @@ Be동사 (현재),5,나 추워. 창문 닫아도 될까?,I'm cold. Can I close t
 Be동사 (현재),6,제임스는 선생님이 아니라 학생이야.,James isn't a teacher. He's a student.
 Be동사 (현재),7,우리 집은 시내 근처에 있어.,Our house is near downtown.
 Be동사 (현재),8,톰은 여기 없어. 회사에 있어.,Tom isn't here. He's at work.
-Be동사 (현재),9,안나랑 나는 친한 친구야.,Anna and I are good/close friends.
+Be동사 (현재),9,안나랑 나는 친한 친구야.,Anna and I are good friends.
 Be동사 (현재),10,파리는 정말 아름다운 도시야.,Paris is a beautiful city.
 Be동사 (현재),11,알렉스는 개를 무서워해.,Alex is scared of dogs.
 Be동사 (현재),12,제인은 호주 사람이야. 미국 사람이 아니야.,Jane is Australian. She isn't American.
@@ -28,19 +28,19 @@ B: Yes, a little bit."
 현재진행형,1,조용히 해 주세요. 지금 일하고 있어요.,Please be quiet. I'm working.
 현재진행형,2,"봐, 사라가 있어. 지금 갈색 코트를 입고 있어.","Look, there's Sarah. She's wearing a brown coat."
 현재진행형,3,날씨가 좋아요. 지금 비가 안 와요.,The weather is nice. It's not raining.
-현재진행형,4,"""아이들은 어디 있어요?""
-""공원에서 놀고 있어요.""","""Where are the children?""
-""They're playing in the park."""
-현재진행형,5,지금 저녁 먹고 있어요. 나중에 전화해도 될까요?,(on the phone) We're having dinner now. Can I call you later?
+현재진행형,4,"A: 아이들은 어디 있어요?
+B: 공원에서 놀고 있어요.","A: Where are the children?
+B: They're playing in the park."
+현재진행형,5,지금 저녁 먹고 있어요. 나중에 전화해도 될까요?,We're having dinner now. Can I call you later?
 현재진행형,6,"A: 비 와?
 B: 응, 우산 챙겨.","A: Is it raining?
-B: Yes, bring an umbrella."
+B: Yes, take an umbrella."
 현재진행형,7,왜 코트 입고 있어? 춥지 않잖아.,Why are you wearing a coat? It's not cold.
 현재진행형,8,"A: 에릭은 뭐 하고 있어?
 B: 시험 공부하고 있어.","A: What's Eric doing?
-B: He's studying for an exam."
+B: He's studying for his exams."
 현재진행형,9,"A: 아이들은 뭐 하고 있어?
-B: TV 보고 있어.","A: What are the kids doing?
+B: TV 보고 있어.","A: What are the children doing?
 B: They're watching TV."
 현재진행형,10,"A: (몸 상태가) 괜찮아?
 B: 네, 괜찮아요. 고마워요.","A: Are you feeling OK?
@@ -56,7 +56,7 @@ B: Yes, I'm fine, thanks."
 일반동사 (현재),9,우리는 주말에 자주 늦잠을 자요.,We often sleep late on weekends.
 일반동사 (현재),10,마크는 보통 일요일마다 테니스를 쳐요.,Mark usually plays tennis on Sundays.
 일반동사 (현재),11,"나는 가끔 걸어서 출근해요, 하지만 자주 그러는 건 아니에요.","I sometimes walk to work, but not very often."
-일반동사 (현재),12,"가끔 그는 늦지만, 자주 그런 일은 나지 않아요.","Sometimes he is late, but it doesn't happen very often."
+일반동사 (현재),12,"가끔 그는 늦지만, 그런 일은 자주 일어나지 않아요.","Sometimes he is late, but it doesn't happen very often."
 일반동사 (현재),13,"나는 조쉬를 좋아하지 않고, 조쉬도 나를 좋아하지 않아요.","I don't like Josh, and Josh doesn't like me."
 일반동사 (현재),14,내 차는 기름을 많이 쓰지 않아요.,My car doesn't use much gas.
 일반동사 (현재),15,사라는 스페인어를 하지만 이탈리아어는 못해요.,"Sarah speaks Spanish, but she doesn't speak Italian."
@@ -68,24 +68,26 @@ Be동사 (과거),3,여행이 끝나고 배가 고팠지만 피곤하진 않았�
 Be동사 (과거),4,"호텔은 편안했지만, 비싸진 않았어요.","The hotel was comfortable, but it wasn't expensive."
 Be동사 (과거),5,휴가 중이었을 때 날씨가 좋았나요?,Was the weather nice when you were on vacation?
 Be동사 (과거),6,오늘 아침에 왜 늦었어요?,Why were you late this morning?
-과거진행형,1,어제 11시 30분에 뭐 하고 있었어요? 일하고 있었어요.,What were you doing at 11:30 yesterday? I was working.
+과거진행형,1,"A: 어제 11시 30분에 뭐 하고 있었어요?
+B: 일하고 있었어요.","A: What were you doing at 11:30 yesterday?
+B: I was working."
 과거진행형,2,"A: 그가 뭐라고 말한 거야?
 B: 몰라. 안 듣고 있었어.","A: What did he say?
 B: I don't know. I wasn't listening."
 과거진행형,3,비가 와서 우린 나가지 않았어요.,"It was raining, so we didn't go out."
-과거진행형,4,2009년에 샘은 일본에서 살고 있었어요.,"In 2009, Sam was living in Japan."
+과거진행형,4,2009년에 우리는 일본에서 살고 있었어요.,"In 2009, we were living in Japan."
 과거진행형,5,그녀는 오늘 치마를 입었지만 어제는 바지를 입고 있었어.,"Today she's wearing a skirt, but yesterday she was wearing pants."
-과거진행형,6,일찍 일어났는데 아름다운 아침이었죠. 햇살이 비치고 새들이 지저귀고 있었어.,I woke up early. It was a beautiful morning. The sun was shining and the birds were singing.
+과거진행형,6,어제 일찍 일어났는데 아름다운 아침이었죠. 햇살이 비치고 새들이 지저귀고 있었어.,I woke up early yesterday. It was a beautiful morning. The sun was shining and the birds were singing.
 과거진행형,7,"A: 어제 아침에 뭐 했어?
 B: 테니스를 쳤어.","A: What did you do yesterday morning?
 B: We played tennis."
-과거진행형,8,"A: 9시 30분에 뭐 하고 있었어?
-B: 테니스를 치고 있었어.","A: What were you doing at 9:30?
+과거진행형,8,"A: 10시 30분에 뭐 하고 있었어?
+B: 테니스를 치고 있었어.","A: What were you doing at 10:30?
 B: We were playing tennis."
 과거진행형,9,잭은 어제 책을 읽었어.,Jack read a book yesterday.
 과거진행형,10,잭이 책을 읽고 있을 때 전화가 울렸어.,Jack was reading when his phone rang.
 과거진행형,11,어젯밤에 TV로 경기 봤어?,Did you watch the game on TV last night?
-과거진행형,12,내가 너한테 전화했을 때 TV 보고 있었어.,You were watching TV when I called.
+과거진행형,12,내가 너한테 전화했을 때 TV 보고 있었어?,Were you watching TV when I called you?
 과거진행형,13,나는 9시에 일을 시작해서 4시 30분에 끝냈어. 2시 30분엔 일하고 있었어.,I started work at 9:00 and finished at 4:30. At 2:30 I was working.
 과거진행형,14,우리가 나갔을 때 비가 오고 있었어.,It was raining when we went out.
 과거진행형,15,오늘 아침에 에밀리와 샘을 봤어. 그들은 버스 정류장에서 기다리고 있었어.,I saw Emily and Sam this morning. They were waiting at the bus stop.
@@ -93,7 +95,7 @@ B: We were playing tennis."
 일반동사 (과거),1,나 오늘 아침에 이빨 닦았어.,This morning I brushed my teeth.
 일반동사 (과거),2,토니는 2005년부터 2011년까지 은행에서 일했어.,Tony worked in a bank from 2005 to 2011.
 일반동사 (과거),3,어제 아침 내내 비가 왔고 점심 때 그쳤어요.,Yesterday it rained all morning. It stopped at lunchtime.
-일반동사 (과거),4,우리는 지난 밤 파티를 즐겼어요. 춤도 많이 추고 사람들과 얘기 나눴고 자정에 끝났어요.,We enjoyed the party last night. We danced a lot and talked to people. The party ended at midnight.
+일반동사 (과거),4,우리는 지난 밤 파티를 즐겼어요. 춤도 많이 추고 많은 사람들과 얘기를 나눴어요. 파티는 자정에 끝났어요.,We enjoyed the party last night. We danced a lot and talked to a lot of people. The party ended at midnight.
 일반동사 (과거),5,나는 주로 일찍 일어나지만 오늘 아침에는 9시 30분에 일어났어요.,"I usually get up early, but this morning I got up at 9:30."
 일반동사 (과거),6,메간은 지난주에 영화관에 세 번이나 갔어요.,Megan went to the movies three times last week.
 일반동사 (과거),7,제임스는 방으로 들어와 코트를 벗고 앉았어.,"James came into the room, took off his coat, and sat down."
@@ -113,12 +115,12 @@ B: 네, 가봤어요. 여러 번.","A: Have you been to Mexico City?
 B: Yes, I have. Many times."
 현재완료,2,"A: 일본에 가본 적이 있나요?
 B: 아니요, 한 번도 안 가봤어요.","A: Have you ever been to Japan?
-B: No, I've never been."
+B: No, I've never been to Japan."
 현재완료,3,"A: 프랑스에 가봤나요?
 B: 아니요, 안 가봤어요.","A: Have you been to France?
 B: No, I haven't."
 현재완료,4,"저희는 캐나다에 가봤지만, 알래스카에 간 적이 없어요.","We've been to Canada, but we haven't been to Alaska."
-현재완료,5,메리는 흥미로운 사람이에요. 여러 가지 일을 해봤고 아주 다양한 곳에서 살았거든요.,Mary is an interesting person. She has had many different jobs and has lived in many places.
+현재완료,5,메리는 흥미로운 사람이에요. 여러 가지 일을 해봤고 아주 다양한 곳에서 살았거든요.,Mary is an interesting person. She has had many different jobs and has lived in many different places.
 현재완료,6,"저 여자를 전에 본 적이 있는데, 어디였는지 기억이 안 나네요.","I've seen that woman before, but I can't remember where."
 현재완료,7,"A: 미셸이 호주에 가본 적이 있나요?
 B: 네, 한 번요.","A: Has Michelle ever been to Australia?
@@ -131,7 +133,7 @@ B: Yes, I play a lot."
 Used to,1,"내가 어렸을 때, 나는 초콜릿을 좋아하곤 했어요.","When I was a child, I used to like chocolate."
 Used to,2,"나는 예전에 책을 많이 읽었어요, 하지만 요즘은 많이 읽지 않아요.","I used to read a lot of books, but I don't read much these days."
 Used to,3,리즈는 지금 머리가 짧아요. 하지만 예전에 아주 길었어요.,"Liz has short hair now, but it used to be very long."
-Used to,4,그들은 예전에 우리와 같은 거리에 살았어요. 자주 만났는데 지금은 많이 보지 않아요.,"They used to live on the same street as us, so we met a lot. But we don't see much of each other anymore."
+Used to,4,그들은 예전에 우리와 같은 거리에 살았어요. 한 때 자주 만났는데 지금은 많이 보지 않아요.,"They used to live on the same street as us, so we used to see them a lot. But we don't see them  much anymore."
 Used to,5,"앨리슨은 예전에 피아노가 있었어요, 하지만 몇 년 전에 팔았어요.","Allison used to have a piano, but she sold it a few years ago."
 Used to,6,"나는 예전에 토마토를 좋아하지 않았어요, 하지만 지금은 좋아해요.","I didn't use to like tomatoes, but I like them now."
 Used to,7,여기 오기 전에 어디 살았어요?,Where did you use to live before you came here?
