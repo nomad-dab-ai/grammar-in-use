@@ -307,3 +307,28 @@ body {
   color: var(--sub);
   font-size: 14px;
 }
+
+.btn-add-row {
+  background: var(--primary-light);
+  color: var(--primary);
+  border: 1px dashed var(--primary);
+  border-radius: 8px;
+  padding: 8px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-add-row:hover { background: #dde0ff; }
+
+.btn-delete-row {
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+.btn-delete-row:hover { color: var(--error); background: #fef2f2; }

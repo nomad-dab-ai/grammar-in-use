@@ -1,0 +1,12 @@
+{
+  "name": "Grammar in Use 연습장",
+  "short_name": "Grammar",
+  "description": "쉐도잉·영어 떠올리기·빈칸 채우기 반복 학습",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F5FB",
+  "theme_color": "#5B4FE8",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

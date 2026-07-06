@@ -108,10 +108,7 @@ function selectGrammar(grammar) {
 // ── Table rendering ──────────────────────────────────────
 
 function getClip(s) {
-    const clips = clipsMapping[s.grammar] || [];
-    const group = allSentences.filter(x => x.grammar === s.grammar);
-    const idx = group.findIndex(x => x.number === s.number);
-    return (idx >= 0 && idx < clips.length) ? clips[idx] : null;
+    return clipsMapping[`${s.grammar}||${s.number}`] || null;
 }
 
 function renderTable(grammar) {
@@ -120,28 +117,85 @@ function renderTable(grammar) {
     tbody.innerHTML = '';
 
     sentences.forEach(s => {
-        const clip = getClip(s);
-        const tr = document.createElement('tr');
-        tr.dataset.grammar = s.grammar;
-        tr.dataset.number  = s.number;
-
-        // # cell
-        const tdNum = document.createElement('td');
-        tdNum.className = 'col-num';
-        tdNum.textContent = s.number;
-        tr.appendChild(tdNum);
-
-        // Korean cell
-        tr.appendChild(makeTextCell(s.korean, 'edit-ta edit-korean'));
-
-        // English cell
-        tr.appendChild(makeTextCell(s.english, 'edit-ta edit-english'));
-
-        // Clip cell
-        tr.appendChild(makeClipCell(s, clip));
-
-        tbody.appendChild(tr);
+        tbody.appendChild(makeRow(s));
     });
+
+    // 문장 추가 버튼 행
+    const trAdd = document.createElement('tr');
+    trAdd.id = 'row-add-btn';
+    const tdAdd = document.createElement('td');
+    tdAdd.colSpan = 4;
+    tdAdd.style.textAlign = 'center';
+    tdAdd.style.padding = '10px';
+    const btnAdd = document.createElement('button');
+    btnAdd.className = 'btn-add-row';
+    btnAdd.textContent = '＋ 문장 추가';
+    btnAdd.addEventListener('click', () => addRow(grammar));
+    tdAdd.appendChild(btnAdd);
+    trAdd.appendChild(tdAdd);
+    tbody.appendChild(trAdd);
+}
+
+function makeRow(s) {
+    const clip = getClip(s);
+    const tr = document.createElement('tr');
+    tr.dataset.grammar = s.grammar;
+    tr.dataset.number  = s.number;
+
+    // # cell with delete button
+    const tdNum = document.createElement('td');
+    tdNum.className = 'col-num';
+    const numWrap = document.createElement('div');
+    numWrap.style.display = 'flex';
+    numWrap.style.flexDirection = 'column';
+    numWrap.style.alignItems = 'center';
+    numWrap.style.gap = '4px';
+    const numSpan = document.createElement('span');
+    numSpan.textContent = s.number;
+    const btnDel = document.createElement('button');
+    btnDel.className = 'btn-delete-row';
+    btnDel.textContent = '✕';
+    btnDel.title = '이 문장 삭제';
+    btnDel.addEventListener('click', () => deleteRow(s));
+    numWrap.appendChild(numSpan);
+    numWrap.appendChild(btnDel);
+    tdNum.appendChild(numWrap);
+    tr.appendChild(tdNum);
+
+    // Korean cell
+    tr.appendChild(makeTextCell(s.korean, 'edit-ta edit-korean'));
+
+    // English cell
+    tr.appendChild(makeTextCell(s.english, 'edit-ta edit-english'));
+
+    // Clip cell
+    tr.appendChild(makeClipCell(s, clip));
+
+    return tr;
+}
+
+function addRow(grammar) {
+    flushCurrentEdits();
+    const existing = allSentences.filter(s => s.grammar === grammar);
+    const maxNum = existing.reduce((m, s) => Math.max(m, parseInt(s.number) || 0), 0);
+    const newS = { grammar, number: String(maxNum + 1), korean: '', english: '' };
+    const insertIdx = allSentences.findIndex(s => s.grammar === grammar);
+    if (insertIdx === -1) {
+        allSentences.push(newS);
+    } else {
+        const lastIdx = allSentences.reduce((m, s, i) => s.grammar === grammar ? i : m, insertIdx);
+        allSentences.splice(lastIdx + 1, 0, newS);
+    }
+    renderTable(grammar);
+}
+
+function deleteRow(s) {
+    if (!confirm(`문장 ${s.number}번을 삭제할까요?\n"${s.korean || s.english || '(빈 문장)'}"`)) return;
+    const idx = allSentences.findIndex(x => x.grammar === s.grammar && x.number === s.number);
+    if (idx !== -1) allSentences.splice(idx, 1);
+    // 번호는 재정렬하지 않는다 — 음원 매핑이 "문법||번호" 키에 묶여 있어서
+    // 재정렬하면 뒤 문장들의 음원이 전부 어긋난다. 번호에 빈 자리가 생겨도 무방.
+    renderTable(s.grammar);
 }
 
 function makeTextCell(value, className) {
@@ -249,11 +303,7 @@ async function handleGenerate(s, clipDiv, nameEl, actions, btnGen) {
         const data = await res.json();
 
         if (data.ok) {
-            if (!clipsMapping[s.grammar]) clipsMapping[s.grammar] = [];
-            const group = allSentences.filter(x => x.grammar === s.grammar);
-            const idx = group.findIndex(x => x.number === s.number);
-            while (clipsMapping[s.grammar].length <= idx) clipsMapping[s.grammar].push(null);
-            clipsMapping[s.grammar][idx] = data.path;
+            clipsMapping[`${s.grammar}||${s.number}`] = data.path;
 
             nameEl.className = 'clip-name';
             nameEl.textContent = data.path.split('/').pop();
@@ -307,11 +357,7 @@ async function handleUpload(input, s, clipDiv, nameEl, actions) {
 
         if (data.ok) {
             // Update local mapping
-            if (!clipsMapping[s.grammar]) clipsMapping[s.grammar] = [];
-            const group = allSentences.filter(x => x.grammar === s.grammar);
-            const idx = group.findIndex(x => x.number === s.number);
-            while (clipsMapping[s.grammar].length <= idx) clipsMapping[s.grammar].push(null);
-            clipsMapping[s.grammar][idx] = data.path;
+            clipsMapping[`${s.grammar}||${s.number}`] = data.path;
 
             // Refresh clip cell
             nameEl.className = 'clip-name';

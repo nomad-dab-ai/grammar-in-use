@@ -366,6 +366,50 @@ body {
   padding-bottom: 10px;
 }
 
+/* ── Speed button ───────────────────────────────────── */
+.btn-speed {
+  padding: 9px 13px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 40px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sub);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .15s, color .15s;
+  white-space: nowrap;
+}
+.btn-speed:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── Complete banner ────────────────────────────────── */
+.complete-banner {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 16px 20px;
+  background: var(--success-bg);
+  color: var(--success);
+  border-radius: var(--radius);
+  font-size: 15px;
+  font-weight: 600;
+}
+.complete-banner.visible { display: flex; flex-wrap: wrap; }
+.btn-restart {
+  padding: 9px 18px;
+  background: var(--success);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn-restart:hover { filter: brightness(1.07); }
+
 /* ── Responsive ─────────────────────────────────────── */
 @media (max-width: 480px) {
   .korean-text            { font-size: 18px; }

@@ -1,0 +1,4 @@
+# 관리자 페이지는 로컬 전용 (Vercel 파일시스템이 읽기 전용이라 저장 불가 + 무인증 노출 방지)
+admin.html
+admin.css
+admin.js

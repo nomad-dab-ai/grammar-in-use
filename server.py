@@ -23,12 +23,25 @@ MIME = {
 }
 
 
+def _is_admin_path(path):
+    return path.startswith('/api/admin') or path in ('/admin', '/admin.html')
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_): pass
+
+    def _admin_blocked(self, path):
+        """관리자 기능은 로컬 전용. Vercel(읽기 전용 FS)에서는 차단한다."""
+        if os.environ.get('VERCEL') and _is_admin_path(path):
+            self.send_response(404); self.end_headers()
+            return True
+        return False
 
     def do_GET(self):
         raw  = self.path.split('?')[0]
         path = urllib.parse.unquote(raw)
+        if self._admin_blocked(path):
+            return
 
         if path == '/api/sentences':
             self._json(self._sentences())
@@ -48,6 +61,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = urllib.parse.unquote(self.path.split('?')[0])
+        if self._admin_blocked(path):
+            return
         if path == '/api/admin/sentences':
             self._update_sentences()
         else:
@@ -55,6 +70,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urllib.parse.unquote(self.path.split('?')[0])
+        if self._admin_blocked(path):
+            return
         if path == '/api/admin/upload-clip':
             self._upload_clip()
         elif path == '/api/admin/generate-clip':
@@ -134,19 +151,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             clean_lines = [re.sub(r'^[A-Z]:\s*', '', l) for l in text.splitlines() if l.strip()]
             clean_text  = ' '.join(clean_lines)
 
-            sentences     = self._sentences()
-            grammar_sents = [s for s in sentences if s['grammar'] == grammar]
-            idx           = next((i for i, s in enumerate(grammar_sents) if s['number'] == number), None)
-            if idx is None:
+            sentences = self._sentences()
+            if not any(s['grammar'] == grammar and s['number'] == number for s in sentences):
                 self._json({'ok': False, 'error': '문장을 찾을 수 없음'}); return
 
+            key = f'{grammar}||{number}'
             with open(CLIPS_MAPPING) as f:
                 clips = json.load(f)
-            grammar_clips = clips.get(grammar, [])
+            existing = clips.get(key)
 
             # 저장 경로 결정
-            if idx < len(grammar_clips) and grammar_clips[idx]:
-                base    = os.path.splitext(grammar_clips[idx])[0]
+            if existing:
+                base    = os.path.splitext(existing)[0]
                 rel_out = base + ('.mp3' if use_el else '.m4a')
             else:
                 slug    = re.sub(r'[^\w]', '_', grammar).strip('_')
@@ -190,10 +206,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     if os.path.exists(tmp_path):
                         os.unlink(tmp_path)
 
-            while len(grammar_clips) <= idx:
-                grammar_clips.append(None)
-            grammar_clips[idx] = rel_out
-            clips[grammar] = grammar_clips
+            clips[key] = rel_out
             with open(CLIPS_MAPPING, 'w') as f:
                 json.dump(clips, f, ensure_ascii=False, indent=2)
 
@@ -209,18 +222,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             number  = str(payload['number'])
             mp3     = base64.b64decode(payload['data'])
 
-            sentences        = self._sentences()
-            grammar_sents    = [s for s in sentences if s['grammar'] == grammar]
-            idx              = next((i for i, s in enumerate(grammar_sents) if s['number'] == number), None)
-            if idx is None:
+            sentences = self._sentences()
+            if not any(s['grammar'] == grammar and s['number'] == number for s in sentences):
                 self._json({'ok': False, 'error': '문장을 찾을 수 없음'}); return
 
+            key = f'{grammar}||{number}'
             with open(CLIPS_MAPPING) as f:
                 clips = json.load(f)
-            grammar_clips = clips.get(grammar, [])
+            existing = clips.get(key)
 
-            if idx < len(grammar_clips) and grammar_clips[idx]:
-                rel_path  = grammar_clips[idx]
+            if existing:
+                rel_path  = existing
                 file_path = os.path.join(CLIPS_DIR, rel_path.replace('/', os.sep))
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
             else:
@@ -230,10 +242,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 filename  = f'{slug}_{number.zfill(3)}.mp3'
                 file_path = os.path.join(folder, filename)
                 rel_path  = f'{slug}/{filename}'
-                while len(grammar_clips) <= idx:
-                    grammar_clips.append(None)
-                grammar_clips[idx] = rel_path
-                clips[grammar] = grammar_clips
+                clips[key] = rel_path
                 with open(CLIPS_MAPPING, 'w') as f:
                     json.dump(clips, f, ensure_ascii=False, indent=2)
 
