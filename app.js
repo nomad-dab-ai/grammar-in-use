@@ -4,10 +4,12 @@
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-// 음원 CDN 주소. jsDelivr는 @main 같은 브랜치 주소를 최대 며칠씩 캐시하므로
-// 커밋 해시로 고정한다. 음원 파일을 추가/교체한 커밋을 푸시한 뒤에는
-// 아래 해시를 그 커밋 해시로 바꿔서 함께 배포할 것.
-const CLIPS_BASE = 'https://cdn.jsdelivr.net/gh/nomad-dab-ai/grammar-in-use@3f88de0/clips/';
+// 데이터·음원은 Supabase에서 직접 로드한다 (수업관리시스템과 동일한 DB).
+// 문법/문장 편집은 수업관리시스템의 "문법 예문 관리" 화면에서 하며, 저장 즉시 반영된다.
+// 아래 anon(publishable) 키는 공개 읽기 전용이라 클라이언트에 노출해도 안전하다.
+const SUPABASE_URL  = 'https://sunkpfagbwwnctqdttwi.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_LsGMap_ueJGBXPWimrmJXQ_CN1QU3P_';
+const CLIPS_BASE    = `${SUPABASE_URL}/storage/v1/object/public/grammar-clips/`;
 
 const SPEEDS = [1, 0.85, 0.7];
 
@@ -91,14 +93,46 @@ function saveTab(prefix, tab) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Data loading (Supabase)
+// ─────────────────────────────────────────────────────────────
+async function loadData() {
+    const headers = { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` };
+    const rest = (q) => fetch(`${SUPABASE_URL}/rest/v1/${q}`, { headers }).then(r => {
+        if (!r.ok) throw new Error(`Supabase ${r.status}`);
+        return r.json();
+    });
+
+    const [points, rows] = await Promise.all([
+        rest('grammar_points?select=id,name,sort_order&order=sort_order'),
+        rest('grammar_sentences?select=grammar_point_id,number,korean,english,clip_path&order=grammar_point_id,number'),
+    ]);
+
+    const nameById = Object.fromEntries(points.map(p => [p.id, p.name]));
+    const orderById = Object.fromEntries(points.map(p => [p.id, p.sort_order]));
+
+    // 문법 sort_order → 번호 순으로 정렬해 기존 카테고리 순서를 유지
+    const sorted = [...rows].sort((a, b) =>
+        (orderById[a.grammar_point_id] - orderById[b.grammar_point_id]) || (a.number - b.number));
+
+    sentences = sorted.map(r => ({
+        grammar: nameById[r.grammar_point_id],
+        number:  String(r.number),
+        korean:  r.korean,
+        english: r.english,
+    }));
+
+    clipsMapping = {};
+    for (const r of sorted) {
+        if (r.clip_path) clipsMapping[`${nameById[r.grammar_point_id]}||${r.number}`] = r.clip_path;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
 // Bootstrap
 // ─────────────────────────────────────────────────────────────
 async function init() {
     try {
-        [sentences, clipsMapping] = await Promise.all([
-            fetch('/api/sentences').then(r => r.json()),
-            fetch('/api/clips').then(r => r.json()),
-        ]);
+        await loadData();
         cats = [...new Set(sentences.map(s => s.grammar))];
         // initX() 과정에서 reset이 index를 0으로 저장하므로, 복원용 값을 먼저 확보
         const savedIndexes = {
