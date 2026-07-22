@@ -1,6 +1,16 @@
 {
   "rewrites": [
-    { "source": "/api/sentences", "destination": "/api/sentences" },
-    { "source": "/api/clips",     "destination": "/api/clips" }
+    {
+      "source": "/api/sentences",
+      "destination": "/api/sentences"
+    },
+    {
+      "source": "/api/clips",
+      "destination": "/api/clips"
+    },
+    {
+      "source": "/api/lesson",
+      "destination": "/api/lesson"
+    }
   ]
 }
