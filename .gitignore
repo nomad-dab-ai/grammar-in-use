@@ -7,9 +7,5 @@ split_audio.py
 match_clips.py
 config.json
 
-# 수업 모드(lesson-manager 연동) — 배포 대상 아님. 별도 승인 전까지 커밋 금지.
-lesson-mode.js
-api/lesson.py
-
 # 검증용 스크린샷 (로컬 보존, 추적 제외)
 docs/verification/

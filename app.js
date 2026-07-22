@@ -14,7 +14,6 @@ const CLIPS_BASE    = `${SUPABASE_URL}/storage/v1/object/public/grammar-clips/`;
 const SPEEDS = [0.75, 1, 1.25];
 let   repeatOn = false;          // 반복 재생
 const REVIEW   = new Set();      // ⑤ 다시 볼 문장 id
-let   todaySeen = { date: '', ids: new Set() };   // ④ 오늘 진행한 문장
 
 const STOP = new Set([
     'a', 'an', 'the',
@@ -78,27 +77,7 @@ function clipUrl(clipPath) {
 // Local storage (학습 위치 저장)
 // ─────────────────────────────────────────────────────────────
 // 빈칸 채우기 모드를 없애며 남은 고아 항목 정리 (한 번만 실행되면 그만)
-try { localStorage.removeItem('giu:blank'); } catch {}
-
-const todayKey = () => {
-    const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
-    return d.toISOString().slice(0, 10);
-};
-
-/** ④ 오늘 본 문장 기록 — 같은 문장을 여러 번 봐도 1개로 센다 */
-function markSeen(s) {
-    if (!s || !s.id) return;
-    if (todaySeen.date !== todayKey()) todaySeen = { date: todayKey(), ids: new Set() };
-    if (todaySeen.ids.has(s.id)) return;
-    todaySeen.ids.add(s.id);
-    saveState('today', { date: todaySeen.date, ids: [...todaySeen.ids] });
-    paintTodayCount();
-}
-
-function paintTodayCount() {
-    const el = $('today-count');
-    if (el) el.textContent = `오늘 ${todaySeen.ids.size}문장`;
-}
+try { localStorage.removeItem('giu:blank'); localStorage.removeItem('giu:today'); } catch {}
 
 /** ⑤ 다시 볼 문장 토글 */
 function toggleReview(id) {
@@ -194,13 +173,8 @@ async function init() {
             audio:  loadState('audio').index,
             recall: loadState('recall').index,
         };
-        // ④⑤ 저장된 학습 기록 복원
-        const savedToday = loadState('today');
-        todaySeen = (savedToday.date === todayKey())
-            ? { date: savedToday.date, ids: new Set(savedToday.ids || []) }
-            : { date: todayKey(), ids: new Set() };
+        // ⑤ 저장된 '다시 볼 문장' 복원
         (loadState('review').ids || []).forEach(id => REVIEW.add(id));
-        paintTodayCount();
         paintReviewCounts();
         initReviewControls();
 
@@ -612,8 +586,8 @@ function renderAudio() {
     $('audio-total').textContent = total;
     $('audio-fill').style.width  = `${(curr / total) * 100}%`;
 
-    markSeen(s);
     paintStar('audio', audioTab);
+    if (window.lessonOnSentence) lessonOnSentence(s);   // 수업 모드 연동
     saveTab('audio', audioTab);
 }
 
@@ -672,8 +646,8 @@ function renderRecall() {
     $('recall-total').textContent = total;
     $('recall-fill').style.width  = `${(curr / total) * 100}%`;
 
-    markSeen(s);
     paintStar('recall', recall);
+    if (window.lessonOnSentence) lessonOnSentence(s);   // 수업 모드 연동
     saveTab('recall', recall);
 }
 

@@ -430,12 +430,6 @@ body {
 }
 
 /* 오늘 진행한 문장 수 — 보라 헤더 위라 밝은 색이어야 읽힌다 */
-.today-count {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: rgba(255, 255, 255, .8);
-}
-
 /* 다시 볼 문장 별표 */
 .btn-star {
   position: absolute;
