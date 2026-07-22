@@ -33,7 +33,6 @@ let speedIdx     = 0;
 
 const audioTab = { list: [], index: 0, grammars: new Set() };
 const recall   = { list: [], index: 0, grammars: new Set() };
-const blank    = { list: [], index: 0, grammars: new Set(), checked: false };
 
 // ─────────────────────────────────────────────────────────────
 // Utilities
@@ -75,6 +74,9 @@ function clipUrl(clipPath) {
 // ─────────────────────────────────────────────────────────────
 // Local storage (학습 위치 저장)
 // ─────────────────────────────────────────────────────────────
+// 빈칸 채우기 모드를 없애며 남은 고아 항목 정리 (한 번만 실행되면 그만)
+try { localStorage.removeItem('giu:blank'); } catch {}
+
 function loadState(key) {
     try { return JSON.parse(localStorage.getItem(`giu:${key}`)) || {}; }
     catch { return {}; }
@@ -104,7 +106,7 @@ async function loadData() {
 
     const [points, rows] = await Promise.all([
         rest('grammar_points?select=id,name,sort_order&order=sort_order'),
-        rest('grammar_sentences?select=grammar_point_id,number,korean,english,clip_path&order=grammar_point_id,number'),
+        rest('grammar_sentences?select=id,grammar_point_id,number,korean,english,clip_path&order=grammar_point_id,number'),
     ]);
 
     const nameById = Object.fromEntries(points.map(p => [p.id, p.name]));
@@ -115,6 +117,7 @@ async function loadData() {
         (orderById[a.grammar_point_id] - orderById[b.grammar_point_id]) || (a.number - b.number));
 
     sentences = sorted.map(r => ({
+        id:      r.id,
         grammar: nameById[r.grammar_point_id],
         number:  String(r.number),
         korean:  r.korean,
@@ -138,14 +141,12 @@ async function init() {
         const savedIndexes = {
             audio:  loadState('audio').index,
             recall: loadState('recall').index,
-            blank:  loadState('blank').index,
         };
         initSpeed();
         initGrammarSelectors();
         initTabNav();
         initAudio();
         initRecall();
-        initBlank();
         restoreIndexes(savedIndexes);
         initKeyboard();
     } catch (err) {
@@ -157,8 +158,7 @@ async function init() {
 // 저장된 학습 위치 복원 (필터·셔플은 initGrammarSelectors/initX에서 복원)
 function restoreIndexes(saved) {
     [['audio', audioTab, renderAudio],
-     ['recall', recall, renderRecall],
-     ['blank', blank, renderBlank]].forEach(([prefix, tab, render]) => {
+     ['recall', recall, renderRecall]].forEach(([prefix, tab, render]) => {
         const idx = saved[prefix];
         if (Number.isInteger(idx) && idx > 0 && idx < tab.list.length) {
             tab.index = idx;
@@ -174,7 +174,6 @@ function initGrammarSelectors() {
     const configs = [
         { prefix: 'audio', tab: audioTab, reset: resetAudio },
         { prefix: 'recall', tab: recall,  reset: resetRecall },
-        { prefix: 'blank',  tab: blank,   reset: resetBlank },
     ];
 
     configs.forEach(({ prefix, tab, reset }) => {
@@ -290,8 +289,6 @@ function initKeyboard() {
             e.preventDefault();
             if (tabName === 'audio') $('btn-listen').click();
             else if (tabName === 'recall') $('btn-reveal').click();
-        } else if (e.key === 'Enter' && tabName === 'blank' && blank.checked) {
-            stepBlank(1);
         }
     });
 }
@@ -299,7 +296,6 @@ function initKeyboard() {
 function stepFor(tabName, dir) {
     if (tabName === 'audio')  { stopAudio(); stepAudio(dir); }
     if (tabName === 'recall') { stopAudio(); stepRecall(dir); }
-    if (tabName === 'blank')  stepBlank(dir);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -553,141 +549,6 @@ function renderRecall() {
     saveTab('recall', recall);
 }
 
-// ─────────────────────────────────────────────────────────────
-// TAB 3 – Fill in the blank (빈칸 채우기)
-// ─────────────────────────────────────────────────────────────
-function initBlank() {
-    $('btn-reshuffle').addEventListener('click', resetBlank);
-    $('btn-check').addEventListener('click', checkBlanks);
-    $('btn-show-ans').addEventListener('click', showAnswer);
-    $('btn-blank-prev').addEventListener('click', () => stepBlank(-1));
-    $('btn-blank-next').addEventListener('click', () => stepBlank(1));
-    $('btn-blank-restart').addEventListener('click', resetBlank);
-
-    resetBlank();
-}
-
-function resetBlank() {
-    blank.list  = shuffle(filterSentences(blank.grammars));
-    blank.index = 0;
-    renderBlank();
-}
-
-function stepBlank(dir) {
-    const next = blank.index + dir;
-    if (next < 0) return;
-    if (next >= blank.list.length) { showComplete('blank'); return; }
-    blank.index = next;
-    renderBlank();
-}
-
-function tokenise(text) {
-    const flat  = text.replace(/\n/g, ' ');
-    const parts = [];
-    let i = 0, wi = 0;
-    while (i < flat.length) {
-        if (/[a-zA-Z']/.test(flat[i])) {
-            const start = i;
-            while (i < flat.length && /[a-zA-Z']/.test(flat[i])) i++;
-            parts.push({ kind: 'word', text: flat.slice(start, i), wi: wi++ });
-        } else {
-            const start = i;
-            while (i < flat.length && !/[a-zA-Z']/.test(flat[i])) i++;
-            parts.push({ kind: 'gap', text: flat.slice(start, i) });
-        }
-    }
-    return parts;
-}
-
-function chooseBlanks(parts) {
-    const candidates = parts.filter(
-        p => p.kind === 'word' && p.text.length >= 2 && !STOP.has(p.text.toLowerCase())
-    );
-    const n = candidates.length <= 3 ? 1 : candidates.length <= 8 ? 2 : 3;
-    return new Set(shuffle(candidates).slice(0, n).map(p => p.wi));
-}
-
-function renderBlank() {
-    const s = blank.list[blank.index];
-    if (!s) return;
-
-    hideComplete('blank');
-    blank.checked = false;
-    $('blank-badge').textContent  = grammarLabel(s.grammar);
-    $('blank-korean').textContent = s.korean;
-
-    const parts    = tokenise(s.english);
-    const blankWIs = chooseBlanks(parts);
-
-    const wrap = $('blank-sentence');
-    wrap.innerHTML = '';
-    parts.forEach(p => {
-        if (p.kind === 'gap') {
-            wrap.appendChild(document.createTextNode(p.text));
-        } else if (blankWIs.has(p.wi)) {
-            const inp = document.createElement('input');
-            inp.type           = 'text';
-            inp.className      = 'blank-input';
-            inp.dataset.answer = p.text;
-            inp.style.width    = `${Math.max(52, p.text.length * 12)}px`;
-            inp.autocomplete   = 'off';
-            inp.autocorrect    = 'off';
-            inp.autocapitalize = 'off';
-            inp.spellcheck     = false;
-            inp.addEventListener('keydown', e => { if (e.key === 'Enter') checkBlanks(); });
-            wrap.appendChild(inp);
-        } else {
-            wrap.appendChild(document.createTextNode(p.text));
-        }
-    });
-
-    $('blank-result').innerHTML     = '';
-    $('btn-check').style.display    = '';
-    $('btn-show-ans').style.display = 'none';
-
-    const curr = blank.index + 1, total = blank.list.length;
-    $('blank-curr').textContent  = curr;
-    $('blank-total').textContent = total;
-    $('blank-fill').style.width  = `${(curr / total) * 100}%`;
-
-    saveTab('blank', blank);
-
-    const first = wrap.querySelector('.blank-input');
-    if (first) requestAnimationFrame(() => first.focus());
-}
-
-function checkBlanks() {
-    if (blank.checked) return;
-    blank.checked = true;
-
-    const inputs = Array.from(document.querySelectorAll('#blank-sentence .blank-input'));
-    let allRight = true;
-    const lines  = [];
-
-    inputs.forEach(inp => {
-        const user   = normalize(inp.value);
-        const answer = normalize(inp.dataset.answer);
-        const ok     = user !== '' && user === answer;
-        if (!ok) allRight = false;
-        inp.classList.add(ok ? 'correct' : 'wrong');
-        inp.readOnly = true;
-        lines.push(ok
-            ? `<div class="result-correct">✅ <strong>${escHtml(inp.dataset.answer)}</strong> — 정답!</div>`
-            : `<div class="result-wrong">❌ 내 답: <strong>${escHtml(inp.value) || '(빈칸)'}</strong> → 정답: <strong>${escHtml(inp.dataset.answer)}</strong></div>`
-        );
-    });
-
-    $('blank-result').innerHTML = lines.join('');
-    if (!allRight) $('btn-show-ans').style.display = '';
-}
-
-function showAnswer() {
-    const s = blank.list[blank.index];
-    if (!s) return;
-    $('blank-result').innerHTML +=
-        `<div class="result-full-answer"><strong>전체 문장:</strong><br>${escHtml(s.english)}</div>`;
-    $('btn-show-ans').style.display = 'none';
-}
 
 // ─────────────────────────────────────────────────────────────
 // Helpers

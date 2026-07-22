@@ -248,32 +248,7 @@ body {
 }
 
 /* ━━━━━━━━━━━━━━━━━━  TAB 3 : BLANK  ━━━━━━━━━━━━━━━━━━ */
-.blank-sentence-wrap {
-  font-size: 17px;
-  line-height: 2.2;
-  margin: 14px 0 22px;
-  word-wrap: break-word;
-}
-.blank-input {
-  display: inline-block;
-  border: none;
-  border-bottom: 2.5px solid var(--primary);
-  padding: 2px 5px;
-  font-size: 17px;
-  font-family: inherit;
-  color: var(--text);
-  background: transparent;
-  min-width: 52px;
-  text-align: center;
-  outline: none;
-  transition: border-color .2s, color .2s;
-  vertical-align: baseline;
-}
-.blank-input:focus         { border-bottom-color: var(--primary-hover); }
-.blank-input.correct       { border-bottom-color: var(--success); color: var(--success); font-weight: 600; }
-.blank-input.wrong         { border-bottom-color: var(--error);   color: var(--error);   background: var(--error-bg); border-radius: 4px 4px 0 0; }
 
-.blank-actions { display: flex; gap: 10px; margin-bottom: 14px; }
 .btn-primary {
   flex: 1;
   padding: 13px;
@@ -303,7 +278,6 @@ body {
 }
 .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
 
-.blank-result        { font-size: 14px; line-height: 1.9; }
 .result-correct      { color: var(--success); }
 .result-wrong        { color: var(--error); }
 .result-full-answer  { color: var(--sub); margin-top: 8px; white-space: pre-line; }
@@ -414,6 +388,4 @@ body {
 @media (max-width: 480px) {
   .korean-text            { font-size: 18px; }
   .english-text           { font-size: 16px; }
-  .blank-sentence-wrap    { font-size: 15px; }
-  .blank-input            { font-size: 15px; }
 }
