@@ -140,8 +140,7 @@ function lessonShowBar() {
           <button id="lm-end" style="padding:5px 12px;border:1px solid #334155;border-radius:8px;background:transparent;color:#CBD5E1;font-size:12px;cursor:pointer">종료</button>
         </div>
       </div>
-      <div id="lm-cur" style="margin-top:8px;font-size:13px;color:#CBD5E1"></div>
-      <div id="lm-tags" style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap"></div>
+      <div id="lm-tags" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
     </div>`;
   document.body.appendChild(bar);
   document.body.style.paddingBottom = '130px';
@@ -164,60 +163,91 @@ function lessonUpdateCount() {
 }
 
 // ── 현재 문장 변경 시 (app.js 렌더 훅에서 호출) ──
+// ★ 이 바는 수업 중 학생에게도 보인다. 문장(영어·한국어)을 절대 표시하지 않는다.
+//   무엇을 기록 중인지는 화면 가운데 카드가 이미 보여준다.
+
+function lessonEntry(id) {
+  const e = lesson.logged[id];
+  return e ? { tags: e.tags || [], note: e.note || '' } : null;
+}
+
 function lessonOnSentence(s) {
   lesson.current = s;
   if (!lesson.active || !lesson.bar) return;
-  const cur = lesson.bar.querySelector('#lm-cur');
   const tagsWrap = lesson.bar.querySelector('#lm-tags');
-  const logged = Object.prototype.hasOwnProperty.call(lesson.logged, s.id);
-  const tags = lesson.logged[s.id] || [];
-
-  cur.innerHTML = `<span style="color:#fff;font-weight:600">${s.english}</span> <span style="color:#64748B">— ${s.korean}</span>`;
+  const entry = lessonEntry(s.id);
+  const logged = !!entry;
+  const tags = entry ? entry.tags : [];
+  const note = entry ? entry.note : '';
 
   const doneBtn = `<button data-act="done" style="padding:4px 10px;border-radius:999px;border:1px solid ${logged ? '#22C55E' : '#334155'};background:${logged ? '#16A34A' : 'transparent'};color:${logged ? '#fff' : '#CBD5E1'};font-size:12px;cursor:pointer">${logged ? '✓ 완료' : '완료 표시'}</button>`;
   const tagBtns = LESSON_TAGS.map(t => {
     const on = tags.includes(t);
     return `<button data-tag="${t}" style="padding:4px 10px;border-radius:999px;border:1px solid ${on ? '#F87171' : '#334155'};background:${on ? '#DC2626' : 'transparent'};color:${on ? '#fff' : '#94A3B8'};font-size:12px;cursor:pointer">${t}</button>`;
   }).join('');
-  tagsWrap.innerHTML = doneBtn + tagBtns;
+  const memo = `<input id="lm-note" value="${note.replace(/"/g, '&quot;')}" placeholder="메모 (선택)" style="flex:1;min-width:140px;padding:4px 8px;border-radius:8px;border:1px solid #334155;background:#0B1220;color:#E2E8F0;font-size:12px" />`;
+
+  tagsWrap.innerHTML = doneBtn + tagBtns + memo;
 
   tagsWrap.querySelector('[data-act="done"]').onclick = () => lessonToggleDone(s);
   tagsWrap.querySelectorAll('[data-tag]').forEach(b => {
     b.onclick = () => lessonToggleTag(s, b.getAttribute('data-tag'));
   });
+  const noteEl = tagsWrap.querySelector('#lm-note');
+  noteEl.onblur = () => {
+    const v = noteEl.value.trim();
+    const cur = lessonEntry(s.id);
+    if (cur && cur.note === v) return;
+    lesson.logged[s.id] = { tags: cur ? cur.tags : [], note: v };
+    lessonUpdateCount();
+    lessonLog(s);                       // 저장은 뒤에서
+  };
 }
 
-async function lessonToggleDone(s) {
-  if (Object.prototype.hasOwnProperty.call(lesson.logged, s.id)) {
-    // 완료 해제 → 기록 삭제
-    try {
-      await lessonApi('remove', { sheet_id: lesson.sheetId, sentence_id: s.id });
-      delete lesson.logged[s.id];
-    } catch (e) { alert(e.message); }
+// 아래 조작들은 화면을 먼저 바꾸고 저장은 뒤에서 한다.
+// 함수가 미국 리전에서 돌아 왕복이 400ms 넘는데, 기다렸다 그리면 수업 중에 답답하다.
+
+function lessonToggleDone(s) {
+  const cur = lessonEntry(s.id);
+  if (cur) {
+    delete lesson.logged[s.id];
+    lessonUpdateCount(); lessonOnSentence(s);
+    lessonApi('remove', { sheet_id: lesson.sheetId, sentence_id: s.id })
+      .catch(e => lessonWarn(e, s));
   } else {
-    await lessonLog(s, []);
+    lesson.logged[s.id] = { tags: [], note: '' };
+    lessonUpdateCount(); lessonOnSentence(s);
+    lessonLog(s);
   }
-  lessonUpdateCount();
-  lessonOnSentence(s);
 }
 
-async function lessonToggleTag(s, tag) {
-  const cur = lesson.logged[s.id] || [];
-  const next = cur.includes(tag) ? cur.filter(t => t !== tag) : cur.concat(tag);
-  await lessonLog(s, next);
-  lessonUpdateCount();
-  lessonOnSentence(s);
+function lessonToggleTag(s, tag) {
+  const cur = lessonEntry(s.id) || { tags: [], note: '' };
+  const next = cur.tags.includes(tag) ? cur.tags.filter(t => t !== tag) : cur.tags.concat(tag);
+  lesson.logged[s.id] = { tags: next, note: cur.note };
+  lessonUpdateCount(); lessonOnSentence(s);
+  lessonLog(s);
 }
 
-async function lessonLog(s, tags) {
-  try {
-    await lessonApi('log', {
-      sheet_id: lesson.sheetId, sentence_id: s.id,
-      grammar_name: s.grammar, korean: s.korean, english: s.english,
-      error_tags: tags,
-    });
-    lesson.logged[s.id] = tags;   // 태그가 있든 없든 '완료'로 기록됨
-  } catch (e) { alert(e.message); }
+/** 저장 실패는 조용히 넘기지 않고 바에 표시한다 */
+function lessonWarn(e, s) {
+  const el = lesson.bar && lesson.bar.querySelector('#lm-count');
+  if (el) {
+    el.textContent = '저장 실패 — 다시 눌러주세요';
+    el.style.color = '#FCA5A5';
+    setTimeout(() => { el.style.color = ''; lessonUpdateCount(); }, 3000);
+  }
+  console.error('lesson save failed', e);
+  void s;
+}
+
+function lessonLog(s) {
+  const entry = lessonEntry(s.id) || { tags: [], note: '' };
+  return lessonApi('log', {
+    sheet_id: lesson.sheetId, sentence_id: s.id,
+    grammar_name: s.grammar, korean: s.korean, english: s.english,
+    error_tags: entry.tags, note: entry.note,
+  }).catch(e => lessonWarn(e, s));
 }
 
 window.lessonOnSentence = lessonOnSentence;

@@ -111,31 +111,45 @@ def _sheet(p):
         return 502, {'error': 'sheet ' + str(rows)}
     sheet_id = rows[0]['id']
     st, items = _sb('GET', '/rest/v1/lesson_practice_items?' +
-                    _q(select='sentence_id,error_tags', sheet_id='eq.' + sheet_id))
-    logged = {it['sentence_id']: (it.get('error_tags') or []) for it in (items or []) if it.get('sentence_id')}
+                    _q(select='sentence_id,error_tags,note', sheet_id='eq.' + sheet_id))
+    logged = {it['sentence_id']: {'tags': it.get('error_tags') or [], 'note': it.get('note') or ''}
+              for it in (items or []) if it.get('sentence_id')}
     return 200, {'sheet_id': sheet_id, 'logged': logged}
 
 
 def _log(p):
+    """문장 기록 upsert.
+
+    함수가 미국 리전(iad1)에서 도는데 사용자는 한국이라 왕복 한 번이 비싸다.
+    존재 확인과 sort_order 조회를 한 번의 조회로 합쳐 왕복을 3회 → 2회로 줄인다.
+    """
     sheet_id = p['sheet_id']; sentence_id = p.get('sentence_id')
     tags = p.get('error_tags') or []
-    st, existing = _sb('GET', '/rest/v1/lesson_practice_items?' +
-                       _q(select='id', sheet_id='eq.' + sheet_id, sentence_id='eq.' + str(sentence_id)))
-    if existing:
-        pid = existing[0]['id']
-        _sb('PATCH', '/rest/v1/lesson_practice_items?' + _q(id='eq.' + pid), {'error_tags': tags})
+    note = p.get('note')
+
+    st, rows = _sb('GET', '/rest/v1/lesson_practice_items?' +
+                   _q(select='id,sentence_id,sort_order', sheet_id='eq.' + sheet_id))
+    rows = rows or []
+    mine = next((r for r in rows if r.get('sentence_id') == sentence_id), None)
+
+    patch = {'error_tags': tags}
+    if note is not None:
+        patch['note'] = note or None
+
+    if mine:
+        _sb('PATCH', '/rest/v1/lesson_practice_items?' + _q(id='eq.' + mine['id']), patch)
     else:
         # 편집기(lesson-manager)와 같은 규칙으로 순서를 이어붙인다.
         # 넣지 않으면 전부 기본값 0이 되어 슬라이드 '연습 문장 불러오기' 순서가 뒤엉킨다.
-        st, last = _sb('GET', '/rest/v1/lesson_practice_items?' +
-                       _q(select='sort_order', sheet_id='eq.' + sheet_id,
-                          order='sort_order.desc', limit='1'))
-        next_order = (last[0]['sort_order'] + 1) if last else 0
-        _sb('POST', '/rest/v1/lesson_practice_items', {
+        next_order = max([r.get('sort_order') or 0 for r in rows], default=-1) + 1
+        body = {
             'sheet_id': sheet_id, 'sentence_id': sentence_id,
-            'grammar_name': p.get('grammar_name'), 'korean': p.get('korean'), 'english': p.get('english'),
-            'error_tags': tags, 'sort_order': next_order,
-        })
+            'grammar_name': p.get('grammar_name'), 'korean': p.get('korean'),
+            'english': p.get('english'), 'error_tags': tags, 'sort_order': next_order,
+        }
+        if note is not None:
+            body['note'] = note or None
+        _sb('POST', '/rest/v1/lesson_practice_items', body)
     return 200, {'ok': True}
 
 
