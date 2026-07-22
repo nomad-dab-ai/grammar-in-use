@@ -294,7 +294,7 @@ function initTabNav() {
             document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
             btn.classList.add('active');
             $(`tab-${btn.dataset.tab}`).classList.add('active');
-            btn.blur();   // 포커스가 남으면 스페이스가 이 버튼으로 먹힌다
+            btn.blur();   // 포커스가 남으면 다음 키 입력이 이 버튼으로 먹힌다
         });
     });
 }
