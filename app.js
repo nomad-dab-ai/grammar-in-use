@@ -11,7 +11,8 @@ const SUPABASE_URL  = 'https://sunkpfagbwwnctqdttwi.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_LsGMap_ueJGBXPWimrmJXQ_CN1QU3P_';
 const CLIPS_BASE    = `${SUPABASE_URL}/storage/v1/object/public/grammar-clips/`;
 
-const SPEEDS = [1, 0.85, 0.7];
+const SPEEDS = [0.75, 1, 1.25];
+let   repeatOn = false;          // 반복 재생
 
 const STOP = new Set([
     'a', 'an', 'the',
@@ -29,7 +30,7 @@ const STOP = new Set([
 let sentences    = [];
 let clipsMapping = {};   // { "문법||번호": "폴더/파일.mp3" }
 let cats         = [];   // ordered list of grammar categories
-let speedIdx     = 0;
+let speedIdx     = 1;   // 기본 1× (SPEEDS 배열의 가운데)
 
 const audioTab = { list: [], index: 0, grammars: new Set() };
 const recall   = { list: [], index: 0, grammars: new Set() };
@@ -259,6 +260,7 @@ function initTabNav() {
             document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
             btn.classList.add('active');
             $(`tab-${btn.dataset.tab}`).classList.add('active');
+            btn.blur();   // 포커스가 남으면 스페이스가 이 버튼으로 먹힌다
         });
     });
 }
@@ -286,11 +288,35 @@ function initKeyboard() {
             e.preventDefault();
             stepFor(tabName, 1);
         } else if (e.key === ' ' && !editing && t.tagName !== 'BUTTON') {
+            // 쉐도잉은 손에 익은 '재생'을 유지하고, 한→영에서만 정답 공개/숨김 토글
             e.preventDefault();
             if (tabName === 'audio') $('btn-listen').click();
-            else if (tabName === 'recall') $('btn-reveal').click();
+            else if (tabName === 'recall') toggleReveal('recall');
+        } else if ((e.key === 'r' || e.key === 'R') && !editing) {
+            // 다시 듣기 — 두 탭 공통. 한→영에서도 문장 음원을 바로 들을 수 있다.
+            e.preventDefault();
+            replayCurrent(tabName);
         }
     });
+}
+
+/** R — 현재 문장을 처음부터 다시 재생 */
+/** 정답 공개/숨김 토글 — 버튼 클릭과 스페이스가 같은 동작을 쓴다 */
+function toggleReveal(prefix) {
+    const el  = $(`${prefix}-reveal`);
+    const btn = $(prefix === 'audio' ? 'btn-audio-reveal' : 'btn-reveal');
+    if (!el || !btn) return;
+    const shown = el.classList.toggle('visible');
+    btn.style.display = shown ? 'none' : '';
+}
+
+/** R — 현재 문장을 처음부터 다시 재생 */
+function replayCurrent(tabName) {
+    const tab = tabName === 'audio' ? audioTab : recall;
+    const s = tab.list[tab.index];
+    if (!s) return;
+    stopAudio();
+    playSentence(s, tabName === 'audio');
 }
 
 function stepFor(tabName, dir) {
@@ -394,7 +420,10 @@ function playSentence(s, markButton) {
             stopAudio();
             $('audio-status').textContent = '⚠️ 재생 실패';
         });
-        p.addEventListener('ended', () => resetListenBtn(), { once: true });
+        p.addEventListener('ended', () => {
+            if (repeatOn) { p.currentTime = 0; p.play().catch(() => resetListenBtn()); }
+            else resetListenBtn();
+        }, { once: true });
     } else if ('speechSynthesis' in window) {
         speakSentence(s.english, markButton);
     }
@@ -416,6 +445,21 @@ function initSpeed() {
         $('audio-player').playbackRate = SPEEDS[speedIdx];
         saveState('speed', { idx: speedIdx });
     });
+
+    // 반복 재생 — 켜두면 문장이 끝날 때마다 다시 재생된다
+    const rep = $('btn-repeat');
+    repeatOn = !!loadState('repeat').on;
+    const paintRepeat = () => {
+        rep.classList.toggle('active', repeatOn);
+        rep.setAttribute('aria-pressed', String(repeatOn));
+        rep.title = repeatOn ? '반복 재생 켜짐' : '반복 재생 꺼짐';
+    };
+    paintRepeat();
+    rep.addEventListener('click', () => {
+        repeatOn = !repeatOn;
+        paintRepeat();
+        saveState('repeat', { on: repeatOn });
+    });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -425,8 +469,7 @@ function initAudio() {
     $('audio-shuffle').addEventListener('change', resetAudio);
 
     $('btn-audio-reveal').addEventListener('click', () => {
-        $('audio-reveal').classList.add('visible');
-        $('btn-audio-reveal').style.display = 'none';
+        toggleReveal('audio');
     });
 
     $('btn-listen').addEventListener('click', () => {
@@ -499,8 +542,7 @@ function renderAudio() {
 function initRecall() {
     $('recall-shuffle').addEventListener('change', resetRecall);
     $('btn-reveal').addEventListener('click', () => {
-        $('recall-reveal').classList.add('visible');
-        $('btn-reveal').style.display = 'none';
+        toggleReveal('recall');
         const s = recall.list[recall.index];
         if (s) playSentence(s, false);
     });
