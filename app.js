@@ -304,8 +304,7 @@ function activeTabName() {
     return btn ? btn.dataset.tab : null;
 }
 
-/** R — 현재 문장을 처음부터 다시 재생 */
-/** 정답 공개/숨김 토글 — 버튼 클릭과 스페이스가 같은 동작을 쓴다 */
+/** 정답 공개/숨김 토글 — '정답 보기' 버튼이 쓴다 */
 function toggleReveal(prefix) {
     const el  = $(`${prefix}-reveal`);
     const btn = $(prefix === 'audio' ? 'btn-audio-reveal' : 'btn-reveal');
