@@ -76,6 +76,106 @@ def _sb(method, path, body=None, extra_headers=None):
 def _q(**kw):
     return urllib.parse.urlencode(kw)
 
+# ── 액션 처리 (순수 함수: (status, dict) 반환) ────────────────
+# server.py(단일 Vercel 함수)와 아래 handler 클래스가 이 함수들을 공유한다.
+# 로직을 한 곳에만 두어 두 진입점이 어긋나지 않게 한다.
+
+def _students():
+    st, students = _sb('GET', '/rest/v1/students?' + _q(select='id,name', status='eq.active', order='name'))
+    if st >= 300:
+        return 502, {'error': 'students ' + str(students)}
+    st, courses = _sb('GET', '/rest/v1/courses?' + _q(select='id,student_id,teacher_id', status='eq.active'))
+    if st >= 300:
+        return 502, {'error': 'courses ' + str(courses)}
+    cmap = {c['student_id']: c for c in courses}
+    out = []
+    for s in students:
+        c = cmap.get(s['id'])
+        if c:
+            out.append({'student_id': s['id'], 'name': s['name'],
+                        'course_id': c['id'], 'teacher_id': c['teacher_id']})
+    return 200, {'students': out}
+
+
+def _sheet(p):
+    course_id = p['course_id']; date = p['date']
+    # teacher_id는 클라이언트 값을 믿지 않고 course로 서버가 결정한다
+    st, courses = _sb('GET', '/rest/v1/courses?' + _q(select='teacher_id', id='eq.' + course_id))
+    if st >= 300 or not courses:
+        return 400, {'error': '수업을 찾을 수 없습니다.'}
+    teacher_id = courses[0]['teacher_id']
+    st, rows = _sb('POST', '/rest/v1/lesson_sheets?' + _q(on_conflict='course_id,session_date'),
+                   {'course_id': course_id, 'teacher_id': teacher_id, 'session_date': date},
+                   {'Prefer': 'resolution=merge-duplicates,return=representation'})
+    if st >= 300 or not rows:
+        return 502, {'error': 'sheet ' + str(rows)}
+    sheet_id = rows[0]['id']
+    st, items = _sb('GET', '/rest/v1/lesson_practice_items?' +
+                    _q(select='sentence_id,error_tags', sheet_id='eq.' + sheet_id))
+    logged = {it['sentence_id']: (it.get('error_tags') or []) for it in (items or []) if it.get('sentence_id')}
+    return 200, {'sheet_id': sheet_id, 'logged': logged}
+
+
+def _log(p):
+    sheet_id = p['sheet_id']; sentence_id = p.get('sentence_id')
+    tags = p.get('error_tags') or []
+    st, existing = _sb('GET', '/rest/v1/lesson_practice_items?' +
+                       _q(select='id', sheet_id='eq.' + sheet_id, sentence_id='eq.' + str(sentence_id)))
+    if existing:
+        pid = existing[0]['id']
+        _sb('PATCH', '/rest/v1/lesson_practice_items?' + _q(id='eq.' + pid), {'error_tags': tags})
+    else:
+        # 편집기(lesson-manager)와 같은 규칙으로 순서를 이어붙인다.
+        # 넣지 않으면 전부 기본값 0이 되어 슬라이드 '연습 문장 불러오기' 순서가 뒤엉킨다.
+        st, last = _sb('GET', '/rest/v1/lesson_practice_items?' +
+                       _q(select='sort_order', sheet_id='eq.' + sheet_id,
+                          order='sort_order.desc', limit='1'))
+        next_order = (last[0]['sort_order'] + 1) if last else 0
+        _sb('POST', '/rest/v1/lesson_practice_items', {
+            'sheet_id': sheet_id, 'sentence_id': sentence_id,
+            'grammar_name': p.get('grammar_name'), 'korean': p.get('korean'), 'english': p.get('english'),
+            'error_tags': tags, 'sort_order': next_order,
+        })
+    return 200, {'ok': True}
+
+
+def _remove(p):
+    sheet_id = p['sheet_id']; sentence_id = p.get('sentence_id')
+    _sb('DELETE', '/rest/v1/lesson_practice_items?' +
+        _q(sheet_id='eq.' + sheet_id, sentence_id='eq.' + str(sentence_id)))
+    return 200, {'ok': True}
+
+
+def handle(payload, ip):
+    """수업 모드 요청 처리. (status, body) 반환."""
+    if not SERVICE_KEY or not PASSCODE:
+        return 500, {'error': '서버 환경변수(SUPABASE_SERVICE_ROLE_KEY, TEACHER_PASSCODE) 미설정'}
+
+    # 비밀번호 검증 (상수 시간 비교) + 무차별 대입 완화
+    if _too_many_fails(ip):
+        time.sleep(FAIL_DELAY_SEC)
+        return 429, {'error': '시도가 너무 많습니다. 잠시 후 다시 시도해주세요.'}
+
+    if not hmac.compare_digest(str(payload.get('passcode', '')), PASSCODE):
+        _note_fail(ip)
+        time.sleep(FAIL_DELAY_SEC)   # 실패는 항상 느리게 — 대입 속도를 떨어뜨린다
+        return 401, {'error': '비밀번호가 올바르지 않습니다.'}
+    _clear_fail(ip)
+
+    action = payload.get('action')
+    try:
+        if action == 'students': return _students()
+        if action == 'sheet':    return _sheet(payload)
+        if action == 'log':      return _log(payload)
+        if action == 'remove':   return _remove(payload)
+        return 400, {'error': 'unknown action'}
+    except Exception as e:
+        return 500, {'error': str(e)}
+
+
+# ── Vercel이 api/*.py를 개별 함수로 잡는 구성일 때의 진입점 ──
+# 현재 배포는 루트 server.py 하나만 함수로 만들므로 이 클래스는 쓰이지 않지만,
+# 구성이 바뀌어도 같은 handle()을 타도록 남겨둔다.
 
 class handler(BaseHTTPRequestHandler):
     def _send(self, status, obj):
@@ -87,101 +187,10 @@ class handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        if not SERVICE_KEY or not PASSCODE:
-            return self._send(500, {'error': '서버 환경변수(SUPABASE_SERVICE_ROLE_KEY, TEACHER_PASSCODE) 미설정'})
-
         length = int(self.headers.get('Content-Length') or 0)
         try:
             payload = json.loads(self.rfile.read(length) or b'{}')
         except Exception:
             return self._send(400, {'error': '잘못된 요청'})
-
-        # 비밀번호 검증 (상수 시간 비교) + 무차별 대입 완화
-        ip = _client_ip(self.headers)
-        if _too_many_fails(ip):
-            time.sleep(FAIL_DELAY_SEC)
-            return self._send(429, {'error': '시도가 너무 많습니다. 잠시 후 다시 시도해주세요.'})
-
-        if not hmac.compare_digest(str(payload.get('passcode', '')), PASSCODE):
-            _note_fail(ip)
-            time.sleep(FAIL_DELAY_SEC)   # 실패는 항상 느리게 — 대입 속도를 떨어뜨린다
-            return self._send(401, {'error': '비밀번호가 올바르지 않습니다.'})
-        _clear_fail(ip)
-
-        action = payload.get('action')
-        try:
-            if action == 'students':
-                return self._students()
-            if action == 'sheet':
-                return self._sheet(payload)
-            if action == 'log':
-                return self._log(payload)
-            if action == 'remove':
-                return self._remove(payload)
-            return self._send(400, {'error': 'unknown action'})
-        except Exception as e:
-            return self._send(500, {'error': str(e)})
-
-    # 활성 수강생 + 활성 course_id
-    def _students(self):
-        st, students = _sb('GET', '/rest/v1/students?' + _q(select='id,name', status='eq.active', order='name'))
-        if st >= 300:
-            return self._send(502, {'error': 'students ' + str(students)})
-        st, courses = _sb('GET', '/rest/v1/courses?' + _q(select='id,student_id,teacher_id', status='eq.active'))
-        if st >= 300:
-            return self._send(502, {'error': 'courses ' + str(courses)})
-        cmap = {c['student_id']: c for c in courses}
-        out = []
-        for s in students:
-            c = cmap.get(s['id'])
-            if c:
-                out.append({'student_id': s['id'], 'name': s['name'], 'course_id': c['id'], 'teacher_id': c['teacher_id']})
-        return self._send(200, {'students': out})
-
-    # 시트 get-or-create + 이미 기록된 문장
-    def _sheet(self, p):
-        course_id = p['course_id']; date = p['date']
-        # teacher_id는 클라이언트 값을 믿지 않고 course로 서버가 결정한다
-        st, courses = _sb('GET', '/rest/v1/courses?' + _q(select='teacher_id', id='eq.' + course_id))
-        if st >= 300 or not courses:
-            return self._send(400, {'error': '수업을 찾을 수 없습니다.'})
-        teacher_id = courses[0]['teacher_id']
-        st, rows = _sb('POST', '/rest/v1/lesson_sheets?' + _q(on_conflict='course_id,session_date'),
-                       {'course_id': course_id, 'teacher_id': teacher_id, 'session_date': date},
-                       {'Prefer': 'resolution=merge-duplicates,return=representation'})
-        if st >= 300 or not rows:
-            return self._send(502, {'error': 'sheet ' + str(rows)})
-        sheet_id = rows[0]['id']
-        st, items = _sb('GET', '/rest/v1/lesson_practice_items?' + _q(select='sentence_id,error_tags', sheet_id='eq.' + sheet_id))
-        logged = {it['sentence_id']: (it.get('error_tags') or []) for it in (items or []) if it.get('sentence_id')}
-        return self._send(200, {'sheet_id': sheet_id, 'logged': logged})
-
-    # 문장 기록 upsert (sheet+sentence 당 1개)
-    def _log(self, p):
-        sheet_id = p['sheet_id']; sentence_id = p.get('sentence_id')
-        tags = p.get('error_tags') or []
-        # 기존 확인
-        st, existing = _sb('GET', '/rest/v1/lesson_practice_items?' +
-                           _q(select='id', sheet_id='eq.' + sheet_id, sentence_id='eq.' + str(sentence_id)))
-        if existing:
-            pid = existing[0]['id']
-            _sb('PATCH', '/rest/v1/lesson_practice_items?' + _q(id='eq.' + pid), {'error_tags': tags})
-        else:
-            # 편집기(lesson-manager)와 같은 규칙으로 순서를 이어붙인다.
-            # 넣지 않으면 전부 기본값 0이 되어 슬라이드 '연습 문장 불러오기' 순서가 뒤엉킨다.
-            st, last = _sb('GET', '/rest/v1/lesson_practice_items?' +
-                           _q(select='sort_order', sheet_id='eq.' + sheet_id,
-                              order='sort_order.desc', limit='1'))
-            next_order = (last[0]['sort_order'] + 1) if last else 0
-            _sb('POST', '/rest/v1/lesson_practice_items', {
-                'sheet_id': sheet_id, 'sentence_id': sentence_id,
-                'grammar_name': p.get('grammar_name'), 'korean': p.get('korean'), 'english': p.get('english'),
-                'error_tags': tags, 'sort_order': next_order,
-            })
-        return self._send(200, {'ok': True})
-
-    def _remove(self, p):
-        sheet_id = p['sheet_id']; sentence_id = p.get('sentence_id')
-        _sb('DELETE', '/rest/v1/lesson_practice_items?' +
-            _q(sheet_id='eq.' + sheet_id, sentence_id='eq.' + str(sentence_id)))
-        return self._send(200, {'ok': True})
+        status, obj = handle(payload, _client_ip(self.headers))
+        self._send(status, obj)

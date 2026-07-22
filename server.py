@@ -42,6 +42,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.unquote(raw)
         if self._admin_blocked(path):
             return
+        if path.endswith('.py'):          # 서버 소스는 내주지 않는다
+            self.send_response(404); self.end_headers(); return
 
         if path == '/api/sentences':
             self._json(self._sentences())
@@ -72,7 +74,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         path = urllib.parse.unquote(self.path.split('?')[0])
         if self._admin_blocked(path):
             return
-        if path == '/api/admin/upload-clip':
+        if path == '/api/lesson':
+            self._lesson()
+        elif path == '/api/admin/upload-clip':
             self._upload_clip()
         elif path == '/api/admin/generate-clip':
             self._generate_clip()
@@ -80,6 +84,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._save_config()
         else:
             self.send_response(404); self.end_headers()
+
+    def _lesson(self):
+        """수업 모드(lesson-manager 연동). 로직은 api/lesson.py의 handle()에 단일화돼 있다.
+
+        Vercel은 이 server.py 하나만 함수(/index)로 만들기 때문에 api/lesson.py가
+        개별 함수로 뜨지 않는다. 그래서 여기서 직접 불러 쓴다.
+        """
+        import sys
+        api_dir = os.path.join(WEB_DIR, 'api')
+        if api_dir not in sys.path:
+            sys.path.insert(0, api_dir)
+        try:
+            from lesson import handle, _client_ip
+        except Exception as e:
+            self._json_status(500, {'error': 'lesson 모듈 로드 실패: %s' % e}); return
+
+        length = int(self.headers.get('Content-Length') or 0)
+        try:
+            payload = json.loads(self.rfile.read(length) or b'{}')
+        except Exception:
+            self._json_status(400, {'error': '잘못된 요청'}); return
+
+        status, obj = handle(payload, _client_ip(self.headers))
+        self._json_status(status, obj)
 
     def _update_sentences(self):
         try:
@@ -326,8 +354,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _json(self, data):
+        self._json_status(200, data)
+
+    def _json_status(self, status, data):
         body = json.dumps(data, ensure_ascii=False).encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header('Content-Type',   'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
