@@ -184,7 +184,6 @@ async function init() {
         initAudio();
         initRecall();
         restoreIndexes(savedIndexes);
-        initKeyboard();
     } catch (err) {
         document.querySelector('.app-main').innerHTML =
             `<div class="card"><p style="color:var(--error)">데이터 로딩 실패: ${err.message}</p></div>`;
@@ -305,36 +304,6 @@ function activeTabName() {
     return btn ? btn.dataset.tab : null;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Keyboard shortcuts (←/→ 이동, 스페이스 재생/정답)
-// ─────────────────────────────────────────────────────────────
-function initKeyboard() {
-    document.addEventListener('keydown', e => {
-        const t = e.target;
-        const editing = (t.tagName === 'INPUT' && t.type === 'text' && !t.readOnly)
-                     || t.tagName === 'TEXTAREA';
-        const tabName = activeTabName();
-        if (!tabName) return;
-
-        if (e.key === 'ArrowLeft' && !editing) {
-            e.preventDefault();
-            stepFor(tabName, -1);
-        } else if (e.key === 'ArrowRight' && !editing) {
-            e.preventDefault();
-            stepFor(tabName, 1);
-        } else if (e.key === ' ' && !editing && t.tagName !== 'BUTTON') {
-            // 쉐도잉은 손에 익은 '재생'을 유지하고, 한→영에서만 정답 공개/숨김 토글
-            e.preventDefault();
-            if (tabName === 'audio') $('btn-listen').click();
-            else if (tabName === 'recall') toggleReveal('recall');
-        } else if ((e.key === 'r' || e.key === 'R') && !editing) {
-            // 다시 듣기 — 두 탭 공통. 한→영에서도 문장 음원을 바로 들을 수 있다.
-            e.preventDefault();
-            replayCurrent(tabName);
-        }
-    });
-}
-
 /** R — 현재 문장을 처음부터 다시 재생 */
 /** 정답 공개/숨김 토글 — 버튼 클릭과 스페이스가 같은 동작을 쓴다 */
 function toggleReveal(prefix) {
@@ -343,20 +312,6 @@ function toggleReveal(prefix) {
     if (!el || !btn) return;
     const shown = el.classList.toggle('visible');
     btn.style.display = shown ? 'none' : '';
-}
-
-/** R — 현재 문장을 처음부터 다시 재생 */
-function replayCurrent(tabName) {
-    const tab = tabName === 'audio' ? audioTab : recall;
-    const s = tab.list[tab.index];
-    if (!s) return;
-    stopAudio();
-    playSentence(s, tabName === 'audio');
-}
-
-function stepFor(tabName, dir) {
-    if (tabName === 'audio')  { stopAudio(); stepAudio(dir); }
-    if (tabName === 'recall') { stopAudio(); stepRecall(dir); }
 }
 
 // ─────────────────────────────────────────────────────────────
