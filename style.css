@@ -78,6 +78,7 @@ body {
 
 /* ── Card ───────────────────────────────────────────── */
 .card {
+  position: relative;
   background: var(--card);
   border-radius: var(--radius);
   padding: 22px 20px;
@@ -427,3 +428,29 @@ body {
   font-size: 11px;
   color: var(--text);
 }
+
+/* 오늘 진행한 문장 수 — 보라 헤더 위라 밝은 색이어야 읽힌다 */
+.today-count {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, .8);
+}
+
+/* 다시 볼 문장 별표 */
+.btn-star {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  border: none;
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--border);
+  transition: color .15s, transform .1s;
+}
+.btn-star:hover  { color: #F5B301; transform: scale(1.1); }
+.btn-star.active { color: #F5B301; }
+
+/* '다시 볼 문장만' 필터 */
+.review-toggle input:disabled + span { opacity: .4; }

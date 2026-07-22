@@ -17,6 +17,7 @@
 <header class="app-header">
   <h1>Grammar in Use</h1>
   <p class="subtitle">반복 학습 연습장</p>
+  <p class="today-count" id="today-count">오늘 0문장</p>
 </header>
 
 <nav class="tab-nav">
@@ -50,6 +51,10 @@
         <input type="checkbox" id="audio-shuffle">
         <span>🔀 랜덤</span>
       </label>
+      <label class="shuffle-toggle review-toggle">
+        <input type="checkbox" id="audio-review-only">
+        <span>★ 다시 볼 문장만 (<span class="review-count">0</span>)</span>
+      </label>
     </div>
 
     <div class="progress-bar-wrap">
@@ -63,6 +68,7 @@
 
     <div class="card audio-card">
       <div class="category-badge" id="audio-badge">—</div>
+      <button class="btn-star" id="audio-star" aria-pressed="false" title="다시 볼 문장으로 표시">☆</button>
 
       <div class="audio-play-row">
         <button class="btn-listen" id="btn-listen" disabled>▶ 문장 듣기</button>
@@ -114,6 +120,10 @@
         <input type="checkbox" id="recall-shuffle">
         <span>🔀 랜덤</span>
       </label>
+      <label class="shuffle-toggle review-toggle">
+        <input type="checkbox" id="recall-review-only">
+        <span>★ 다시 볼 문장만 (<span class="review-count">0</span>)</span>
+      </label>
     </div>
 
     <div class="progress-bar-wrap">
@@ -127,6 +137,7 @@
 
     <div class="card recall-card">
       <div class="category-badge" id="recall-badge">—</div>
+      <button class="btn-star" id="recall-star" aria-pressed="false" title="다시 볼 문장으로 표시">☆</button>
       <div class="korean-text" id="recall-korean">로딩 중…</div>
 
       <button class="btn-reveal" id="btn-reveal">정답 보기</button>
