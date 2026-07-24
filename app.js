@@ -36,6 +36,8 @@ let hideClipless = false;   // 전역 설정(app_settings): 음원 없는 문장
 
 const audioTab = { list: [], index: 0, grammars: new Set() };
 const recall   = { list: [], index: 0, grammars: new Set() };
+const vtab     = { list: [], index: 0, grammars: new Set() };   // 바꿔 말하기 (변형)
+let variants   = [];   // { id, english, korean, orig: <원문 문장 객체> } — 승인분만 (RLS)
 
 // ─────────────────────────────────────────────────────────────
 // Utilities
@@ -144,11 +146,13 @@ async function loadData() {
         return r.json();
     });
 
-    const [points, rows, settings] = await Promise.all([
+    const [points, rows, settings, variantRows] = await Promise.all([
         rest('grammar_points?select=id,name,sort_order&order=sort_order'),
         rest('grammar_sentences?select=id,grammar_point_id,number,korean,english,clip_path&order=grammar_point_id,number'),
         // 전역 설정 — 테이블이 아직 없으면 조용히 기본값(false)
         rest('app_settings?select=key,value').catch(() => []),
+        // 변형 문장 — anon RLS가 승인분만 돌려준다. 테이블 미생성 시 빈 배열.
+        rest('grammar_sentence_variants?select=id,sentence_id,english,korean').catch(() => []),
     ]);
 
     for (const s of settings || []) {
@@ -174,6 +178,26 @@ async function loadData() {
     for (const r of sorted) {
         if (r.clip_path) clipsMapping[`${nameById[r.grammar_point_id]}||${r.number}`] = r.clip_path;
     }
+
+    // 변형 → 원문 문장 객체 연결 (원문 순서대로 정렬)
+    const byId = Object.fromEntries(sentences.map(s => [s.id, s]));
+    const orderIdx = Object.fromEntries(sentences.map((s, i) => [s.id, i]));
+    variants = (variantRows || [])
+        .filter(v => byId[v.sentence_id])
+        .sort((a, b) => (orderIdx[a.sentence_id] - orderIdx[b.sentence_id]))
+        .map(v => ({ id: v.id, english: v.english, korean: v.korean, orig: byId[v.sentence_id] }));
+}
+
+/** 변형 리스트: 문법 필터 + '음원 없는 문장 숨기기'는 원문 기준(결정 ii)으로 적용 */
+function filterVariants(grammars) {
+    let base = hideClipless ? variants.filter(v => !!getClip(v.orig)) : variants;
+    if (!grammars || grammars.size === 0) return [...base];
+    return base.filter(v => grammars.has(v.orig.grammar));
+}
+
+/** 이 문법에 (필터 통과하는) 변형이 하나라도 있는가 — 변형 탭 문법 패널용 */
+function grammarHasVariants(cat) {
+    return variants.some(v => v.orig.grammar === cat && (!hideClipless || !!getClip(v.orig)));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -185,8 +209,9 @@ async function init() {
         cats = [...new Set(sentences.map(s => s.grammar))];
         // initX() 과정에서 reset이 index를 0으로 저장하므로, 복원용 값을 먼저 확보
         const savedIndexes = {
-            audio:  loadState('audio').index,
-            recall: loadState('recall').index,
+            audio:   loadState('audio').index,
+            recall:  loadState('recall').index,
+            variant: loadState('variant').index,
         };
         // ⑤ 저장된 '다시 볼 문장' 복원
         (loadState('review').ids || []).forEach(id => REVIEW.add(id));
@@ -198,6 +223,7 @@ async function init() {
         initTabNav();
         initAudio();
         initRecall();
+        initVariant();
         restoreIndexes(savedIndexes);
     } catch (err) {
         document.querySelector('.app-main').innerHTML =
@@ -208,7 +234,8 @@ async function init() {
 // 저장된 학습 위치 복원 (필터·셔플은 initGrammarSelectors/initX에서 복원)
 function restoreIndexes(saved) {
     [['audio', audioTab, renderAudio],
-     ['recall', recall, renderRecall]].forEach(([prefix, tab, render]) => {
+     ['recall', recall, renderRecall],
+     ['variant', vtab, renderVariant]].forEach(([prefix, tab, render]) => {
         const idx = saved[prefix];
         if (Number.isInteger(idx) && idx > 0 && idx < tab.list.length) {
             tab.index = idx;
@@ -224,6 +251,7 @@ function initGrammarSelectors() {
     const configs = [
         { prefix: 'audio', tab: audioTab, reset: resetAudio },
         { prefix: 'recall', tab: recall,  reset: resetRecall },
+        { prefix: 'variant', tab: vtab,   reset: resetVariant },
     ];
 
     configs.forEach(({ prefix, tab, reset }) => {
@@ -254,6 +282,14 @@ function initGrammarSelectors() {
                 span.style.color = '#9CA3AF';
                 span.textContent += ' (음원 없음)';
                 label.title = "'음원 없는 문장 숨기기'가 켜져 있어 이 문법은 연습에서 제외됩니다";
+            }
+            // 변형 탭: 승인된 변형이 없는 문법은 회색+비활성
+            if (prefix === 'variant' && !grammarHasVariants(cat)) {
+                chk.disabled = true;
+                chk.checked  = false;
+                span.style.color = '#9CA3AF';
+                if (!span.textContent.includes('(음원 없음)')) span.textContent += ' (변형 없음)';
+                label.title = '아직 승인된 변형 문장이 없는 문법입니다';
             }
             label.append(chk, span);
             list.appendChild(label);
@@ -328,9 +364,10 @@ function activeTabName() {
 }
 
 /** 정답 공개/숨김 토글 — '정답 보기' 버튼이 쓴다. 공개됐으면 true. */
+const REVEAL_BTN = { audio: 'btn-audio-reveal', recall: 'btn-reveal', variant: 'btn-variant-reveal' };
 function toggleReveal(prefix) {
     const el  = $(`${prefix}-reveal`);
-    const btn = $(prefix === 'audio' ? 'btn-audio-reveal' : 'btn-reveal');
+    const btn = $(REVEAL_BTN[prefix]);
     if (!el || !btn) return false;
     const shown = el.classList.toggle('visible');
     btn.style.display = shown ? 'none' : '';
@@ -637,6 +674,80 @@ function renderRecall() {
     saveTab('recall', recall);
 }
 
+
+// ─────────────────────────────────────────────────────────────
+// TAB 3 – Variant (바꿔 말하기)
+// 출제 (B): 원문 카드 + 변형 한국어 뜻 → (나) 판정 없이 정답 공개.
+// 세션 기록·재생 훅은 전부 원문 문장(orig)으로 — variant_id는 기록하지 않는다.
+// ─────────────────────────────────────────────────────────────
+function initVariant() {
+    $('variant-shuffle').addEventListener('change', resetVariant);
+
+    $('btn-variant-reveal').addEventListener('click', () => {
+        const shown = toggleReveal('variant');
+        const v = vtab.list[vtab.index];
+        if (!shown || !v) return;
+        if (window.lessonOnReveal) lessonOnReveal(v.orig);       // 원문 sid로 기록
+        // 변형은 자체 음원이 없다 — 기존 TTS 폴백으로 읽어준다
+        stopAudio();
+        if (window.lessonOnPlay) lessonOnPlay(v.orig);
+        if ('speechSynthesis' in window) speakSentence(v.english, false);
+    });
+
+    $('btn-variant-prev').addEventListener('click', () => { stopAudio(); stepVariant(-1); });
+    $('btn-variant-next').addEventListener('click', () => { stopAudio(); stepVariant(1); });
+    $('btn-variant-restart').addEventListener('click', resetVariant);
+
+    resetVariant();
+}
+
+function resetVariant() {
+    stopAudio();
+    const rand = $('variant-shuffle').checked;
+    let list = filterVariants(vtab.grammars);
+    if (rand) list = shuffle(list);
+    vtab.list  = list;
+    vtab.index = 0;
+    renderVariant();
+}
+
+function stepVariant(dir) {
+    const next = vtab.index + dir;
+    if (next < 0) return;
+    if (next >= vtab.list.length) { showComplete('variant'); return; }
+    vtab.index = next;
+    renderVariant();
+}
+
+function renderVariant() {
+    const v = vtab.list[vtab.index];
+    if (!v) {
+        $('variant-total').textContent = '0';
+        $('variant-curr').textContent  = '0';
+        $('variant-korean').textContent = variants.length === 0
+            ? '아직 승인된 변형 문장이 없습니다.'
+            : '선택한 문법에 변형이 없습니다.';
+        return;
+    }
+
+    hideComplete('variant');
+    $('variant-reveal').classList.remove('visible');
+    $('btn-variant-reveal').style.display = '';
+
+    $('variant-badge').textContent        = grammarLabel(v.orig.grammar);
+    $('variant-orig-english').textContent = v.orig.english;
+    $('variant-orig-korean').textContent  = v.orig.korean;
+    $('variant-korean').textContent       = v.korean;
+    $('variant-english').textContent      = v.english;
+
+    const curr = vtab.index + 1, total = vtab.list.length;
+    $('variant-curr').textContent  = curr;
+    $('variant-total').textContent = total;
+    $('variant-fill').style.width  = `${(curr / total) * 100}%`;
+
+    if (window.lessonOnSentence) lessonOnSentence(v.orig);   // 수업 모드 — 원문 sid로 enter/leave
+    saveTab('variant', vtab);
+}
 
 // ─────────────────────────────────────────────────────────────
 // Helpers

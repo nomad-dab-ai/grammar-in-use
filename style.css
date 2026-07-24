@@ -430,3 +430,25 @@ body {
 
 /* '다시 볼 문장만' 필터 */
 .review-toggle input:disabled + span { opacity: .4; }
+
+/* ── TAB 3 : 바꿔 말하기 (변형 연습) ── */
+.variant-original {
+  background: #F8FAFC;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 10px 0 16px;
+  text-align: left;
+}
+.variant-original-label,
+.variant-task-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94A3B8;
+  margin-bottom: 6px;
+  letter-spacing: .04em;
+}
+.variant-task-label { color: var(--primary); }
+.variant-original .english-text { font-size: 1.05rem; }
+.variant-original .korean-text  { font-size: .9rem; margin-top: 4px; }
+.variant-task { margin: 6px 0 4px; }
