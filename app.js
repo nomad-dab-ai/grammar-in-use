@@ -32,6 +32,7 @@ let sentences    = [];
 let clipsMapping = {};   // { "문법||번호": "폴더/파일.mp3" }
 let cats         = [];   // ordered list of grammar categories
 let speedIdx     = 1;   // 기본 1× (SPEEDS 배열의 가운데)
+let hideClipless = false;   // 전역 설정(app_settings): 음원 없는 문장 숨기기
 
 const audioTab = { list: [], index: 0, grammars: new Set() };
 const recall   = { list: [], index: 0, grammars: new Set() };
@@ -56,8 +57,16 @@ const normalize = s => s.trim().toLowerCase()
     .replace(/[^a-z']/g, '');
 
 function filterSentences(grammars) {
-    if (!grammars || grammars.size === 0) return [...sentences];
-    return sentences.filter(s => grammars.has(s.grammar));
+    // '음원 없는 문장 숨기기'가 켜져 있으면 연습 리스트에서 클립 없는 문장 제외
+    // (쉐도잉·떠올리기·수업 모드 모두 이 함수로 리스트를 만든다)
+    let base = hideClipless ? sentences.filter(s => !!getClip(s)) : sentences;
+    if (!grammars || grammars.size === 0) return [...base];
+    return base.filter(s => grammars.has(s.grammar));
+}
+
+/** 이 문법에 클립 보유 문장이 하나라도 있는가 (문법 패널 회색 표시용) */
+function grammarHasClips(cat) {
+    return sentences.some(s => s.grammar === cat && !!getClip(s));
 }
 
 function grammarLabel(cat) {
@@ -135,10 +144,16 @@ async function loadData() {
         return r.json();
     });
 
-    const [points, rows] = await Promise.all([
+    const [points, rows, settings] = await Promise.all([
         rest('grammar_points?select=id,name,sort_order&order=sort_order'),
         rest('grammar_sentences?select=id,grammar_point_id,number,korean,english,clip_path&order=grammar_point_id,number'),
+        // 전역 설정 — 테이블이 아직 없으면 조용히 기본값(false)
+        rest('app_settings?select=key,value').catch(() => []),
     ]);
+
+    for (const s of settings || []) {
+        if (s.key === 'hide_clipless') hideClipless = s.value === true;
+    }
 
     const nameById = Object.fromEntries(points.map(p => [p.id, p.name]));
     const orderById = Object.fromEntries(points.map(p => [p.id, p.sort_order]));
@@ -232,6 +247,14 @@ function initGrammarSelectors() {
             chk.checked = useAll || savedGrammars.has(cat);
             const span = document.createElement('span');
             span.textContent = `${i + 1}. ${cat}`;
+            // 숨기기 설정이 켜져 있으면 음원 없는 문법은 회색+비활성 (연습 리스트에 안 나옴)
+            if (hideClipless && !grammarHasClips(cat)) {
+                chk.disabled = true;
+                chk.checked  = false;
+                span.style.color = '#9CA3AF';
+                span.textContent += ' (음원 없음)';
+                label.title = "'음원 없는 문장 숨기기'가 켜져 있어 이 문법은 연습에서 제외됩니다";
+            }
             label.append(chk, span);
             list.appendChild(label);
             chk.addEventListener('change', () => syncGrammarState(prefix, tab, allChk, list, btn, reset));
