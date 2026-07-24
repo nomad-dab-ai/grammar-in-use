@@ -760,4 +760,28 @@ function escHtml(str) {
         .replace(/"/g, '&quot;');
 }
 
+// ─────────────────────────────────────────────────────────────
+// 설정 변경 자동 반영
+// '음원 없는 문장 숨기기'는 로드 시 1회 읽으므로, 열려 있던 화면은 관리 화면의
+// 토글 변경을 모른다. 화면에 다시 돌아올 때 재확인해 바뀌었으면 새로고침한다
+// (연습 위치·필터는 localStorage로 복원). 수업 모드 중에는 세션 기록을 지키기 위해 건드리지 않는다.
+// ─────────────────────────────────────────────────────────────
+let recheckBusy = false;
+async function recheckSettings() {
+    if (recheckBusy) return;
+    if (typeof lesson !== 'undefined' && lesson.active) return;   // 수업 중 자동 새로고침 금지
+    recheckBusy = true;
+    try {
+        const headers = { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` };
+        const r = await fetch(`${SUPABASE_URL}/rest/v1/app_settings?select=value&key=eq.hide_clipless`, { headers });
+        if (r.ok) {
+            const rows = await r.json();
+            if ((rows[0] && rows[0].value === true) !== hideClipless) location.reload();
+        }
+    } catch { /* 네트워크 실패는 조용히 — 다음 focus 때 재시도 */ }
+    finally { recheckBusy = false; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) recheckSettings(); });
+window.addEventListener('focus', recheckSettings);
+
 document.addEventListener('DOMContentLoaded', init);

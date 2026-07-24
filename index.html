@@ -193,21 +193,22 @@
     <div class="card variant-card">
       <div class="category-badge" id="variant-badge">—</div>
 
-      <!-- (B) 원문 카드: 골격을 눈으로 참조하며 치환 -->
-      <div class="variant-original">
-        <div class="variant-original-label">원문</div>
-        <div class="english-text" id="variant-orig-english"></div>
-        <div class="korean-text" id="variant-orig-korean"></div>
-      </div>
-
+      <!-- 처음엔 문제(변형 한국어 뜻)만. 원문은 정답과 함께 공개된다. -->
       <div class="variant-task">
-        <div class="variant-task-label">이 문장을 바꿔 말해보세요</div>
+        <div class="variant-task-label">이 문장을 영어로 말해보세요</div>
         <div class="korean-text" id="variant-korean">로딩 중…</div>
       </div>
 
       <button class="btn-reveal" id="btn-variant-reveal">정답 보기</button>
 
       <div class="english-reveal" id="variant-reveal">
+        <!-- 원문과 나란히 보여 무엇이 바뀌었는지 비교된다 -->
+        <div class="variant-original">
+          <div class="variant-original-label">원문</div>
+          <div class="english-text" id="variant-orig-english"></div>
+          <div class="korean-text" id="variant-orig-korean"></div>
+        </div>
+        <div class="variant-answer-label">변형 정답</div>
         <div class="english-text" id="variant-english"></div>
       </div>
     </div>
