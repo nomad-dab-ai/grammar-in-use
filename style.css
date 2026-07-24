@@ -461,3 +461,19 @@ body {
   text-align: left;
 }
 #variant-reveal .variant-original { margin: 8px 0 4px; }
+
+/* 정답 공개 시: 변형 정답이 주(크게), 원문은 아래 참고용(작고 연하게) */
+#variant-reveal > .english-text { font-size: 20px; }
+#variant-reveal .variant-original {
+  margin: 12px 0 2px;
+  background: #FAFAFA;
+  border-color: #F0F0F2;
+}
+#variant-reveal .variant-original .english-text {
+  font-size: .9rem;
+  color: #8B93A3;
+}
+#variant-reveal .variant-original .korean-text {
+  font-size: .8rem;
+  color: #A8AEBB;
+}
