@@ -8,7 +8,82 @@ const lesson = {
   studentName: '', courseId: '', teacherId: '', date: '',
   logged: {},        // sentence_id -> [tags]
   current: null,     // 현재 문장
+  // 세션 자동 기록 (수업 모드에서만 수집)
+  logId: null, t0: 0, queue: [], flushTimer: null, flushing: false,
+  curSid: null, enterAt: 0,
 };
+
+// ── 세션 자동 기록 ──
+// 이벤트 5종 고정(enter/leave/play/repeat/reveal). 메모리 적재 → 30초/50개마다
+// 일괄 전송, 종료 시 잔여 일괄, 창 닫힘은 sendBeacon. UI를 절대 기다리게 하지 않는다.
+
+const LOG_FLUSH_MS = 30000, LOG_FLUSH_N = 50;
+
+function lessonTrack(type, sid, extra) {
+  if (!lesson.active || !lesson.logId) return;
+  const ev = Object.assign({ t: Math.round((Date.now() - lesson.t0) / 100) / 10, type, sid }, extra || {});
+  lesson.queue.push(ev);
+  if (lesson.queue.length >= LOG_FLUSH_N) lessonFlush();
+}
+
+async function lessonFlush(endAction) {
+  if (lesson.flushing || !lesson.logId) return;
+  if (!endAction && lesson.queue.length === 0) return;
+  const batch = lesson.queue.splice(0);
+  lesson.flushing = true;
+  try {
+    await lessonApi(endAction || 'session_events', { log_id: lesson.logId, events: batch });
+  } catch (e) {
+    lesson.queue = batch.concat(lesson.queue);   // 실패 시 되돌려 다음 주기에 재시도
+    console.error('session log flush failed', e);
+  } finally {
+    lesson.flushing = false;
+  }
+}
+
+async function lessonLogStart() {
+  try {
+    const data = await lessonApi('session_start', { sheet_id: lesson.sheetId });
+    lesson.logId = data.log_id;
+    lesson.t0 = Date.now();
+    lesson.queue = [];
+    lesson.curSid = null;
+    lesson.flushTimer = setInterval(() => lessonFlush(), LOG_FLUSH_MS);
+  } catch (e) {
+    console.error('session log start failed', e);   // 기록 실패가 수업을 막지 않는다
+  }
+}
+
+function lessonLeaveCurrent() {
+  if (lesson.curSid) {
+    lessonTrack('leave', lesson.curSid, { dwell: Math.round((Date.now() - lesson.enterAt) / 100) / 10 });
+    lesson.curSid = null;
+  }
+}
+
+function lessonLogEnd(useBeacon) {
+  if (!lesson.logId) return;
+  lessonLeaveCurrent();
+  if (lesson.flushTimer) { clearInterval(lesson.flushTimer); lesson.flushTimer = null; }
+  const batch = lesson.queue.splice(0);
+  if (useBeacon && navigator.sendBeacon) {
+    // 창이 닫히는 중 — fetch는 취소될 수 있으니 beacon으로 보낸다
+    const body = JSON.stringify({ action: 'session_end', passcode: lesson.passcode,
+                                  log_id: lesson.logId, events: batch });
+    navigator.sendBeacon('/api/lesson', new Blob([body], { type: 'application/json' }));
+  } else {
+    lessonApi('session_end', { log_id: lesson.logId, events: batch })
+      .catch(e => console.error('session log end failed', e));
+  }
+  lesson.logId = null;
+}
+
+window.addEventListener('pagehide', () => { if (lesson.active) lessonLogEnd(true); });
+
+// app.js가 부르는 훅들 (수업 모드가 아닐 땐 lessonTrack이 무시한다)
+window.lessonOnPlay   = s => lessonTrack('play', s.id);
+window.lessonOnRepeat = s => lessonTrack('repeat', s.id);
+window.lessonOnReveal = s => lessonTrack('reveal', s.id);
 
 async function lessonApi(action, extra) {
   const res = await fetch('/api/lesson', {
@@ -120,6 +195,7 @@ async function lessonOpenSetup() {
         lesson.active = true;
         o.remove();
         lessonShowBar();
+        lessonLogStart();                       // 세션 자동 기록 시작 (비동기, 수업을 막지 않음)
         if (lesson.current) lessonOnSentence(lesson.current);
       } catch (e) { err.textContent = e.message; }
     }
@@ -151,6 +227,7 @@ function lessonShowBar() {
 }
 
 function lessonEnd() {
+  lessonLogEnd(false);                          // 잔여 이벤트 일괄 저장 + ended_at
   lesson.active = false;
   if (lesson.bar) { lesson.bar.remove(); lesson.bar = null; }
   document.body.style.paddingBottom = '';
@@ -174,6 +251,13 @@ function lessonEntry(id) {
 function lessonOnSentence(s) {
   lesson.current = s;
   if (!lesson.active || !lesson.bar) return;
+  // 문장 진입/이탈 기록 (같은 문장 재렌더는 무시)
+  if (s.id !== lesson.curSid) {
+    lessonLeaveCurrent();
+    lessonTrack('enter', s.id);
+    lesson.curSid = s.id;
+    lesson.enterAt = Date.now();
+  }
   const tagsWrap = lesson.bar.querySelector('#lm-tags');
   const entry = lessonEntry(s.id);
   const logged = !!entry;

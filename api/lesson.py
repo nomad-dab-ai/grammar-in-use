@@ -160,6 +160,40 @@ def _remove(p):
     return 200, {'ok': True}
 
 
+# ── 세션 자동 기록 (lesson_sessions_log — 세션당 1행, events JSONB) ──
+# 이벤트 5종 고정: enter / leave(dwell 포함) / play / repeat / reveal
+
+MAX_EVENTS = 5000   # 한 세션 이벤트 상한 (폭주 방지)
+
+
+def _session_start(p):
+    st, rows = _sb('POST', '/rest/v1/lesson_sessions_log',
+                   {'sheet_id': p['sheet_id'], 'events': []},
+                   {'Prefer': 'return=representation'})
+    if st >= 300 or not rows:
+        return 502, {'error': 'session_start ' + str(rows)}
+    return 200, {'log_id': rows[0]['id']}
+
+
+def _session_append(p, end=False):
+    log_id = p['log_id']
+    new = p.get('events') or []
+    if not isinstance(new, list):
+        return 400, {'error': 'events must be a list'}
+    # 읽고-합쳐-쓰기 (쓰는 쪽은 강사 브라우저 하나뿐이라 경합 없음)
+    st, rows = _sb('GET', '/rest/v1/lesson_sessions_log?' + _q(select='events', id='eq.' + log_id))
+    if st >= 300 or not rows:
+        return 400, {'error': '세션을 찾을 수 없습니다.'}
+    events = (rows[0].get('events') or []) + new
+    patch = {'events': events[:MAX_EVENTS]}
+    if end:
+        patch['ended_at'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    st, _body = _sb('PATCH', '/rest/v1/lesson_sessions_log?' + _q(id='eq.' + log_id), patch)
+    if st >= 300:
+        return 502, {'error': 'session_append ' + str(_body)}
+    return 200, {'ok': True, 'count': len(events)}
+
+
 def handle(payload, ip):
     """수업 모드 요청 처리. (status, body) 반환."""
     if not SERVICE_KEY or not PASSCODE:
@@ -182,6 +216,9 @@ def handle(payload, ip):
         if action == 'sheet':    return _sheet(payload)
         if action == 'log':      return _log(payload)
         if action == 'remove':   return _remove(payload)
+        if action == 'session_start':  return _session_start(payload)
+        if action == 'session_events': return _session_append(payload)
+        if action == 'session_end':    return _session_append(payload, end=True)
         return 400, {'error': 'unknown action'}
     except Exception as e:
         return 500, {'error': str(e)}

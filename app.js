@@ -304,13 +304,14 @@ function activeTabName() {
     return btn ? btn.dataset.tab : null;
 }
 
-/** 정답 공개/숨김 토글 — '정답 보기' 버튼이 쓴다 */
+/** 정답 공개/숨김 토글 — '정답 보기' 버튼이 쓴다. 공개됐으면 true. */
 function toggleReveal(prefix) {
     const el  = $(`${prefix}-reveal`);
     const btn = $(prefix === 'audio' ? 'btn-audio-reveal' : 'btn-reveal');
-    if (!el || !btn) return;
+    if (!el || !btn) return false;
     const shown = el.classList.toggle('visible');
     btn.style.display = shown ? 'none' : '';
+    return shown;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -399,6 +400,8 @@ function playSentence(s, markButton) {
         btn.classList.add('playing');
     }
 
+    if (window.lessonOnPlay) lessonOnPlay(s);   // 수업 모드 세션 기록 (아닐 땐 무시됨)
+
     const clip = getClip(s);
     if (clip) {
         const p = $('audio-player');
@@ -410,7 +413,10 @@ function playSentence(s, markButton) {
             $('audio-status').textContent = '⚠️ 재생 실패';
         });
         p.addEventListener('ended', () => {
-            if (repeatOn) { p.currentTime = 0; p.play().catch(() => resetListenBtn()); }
+            if (repeatOn) {
+                if (window.lessonOnRepeat) lessonOnRepeat(s);
+                p.currentTime = 0; p.play().catch(() => resetListenBtn());
+            }
             else resetListenBtn();
         }, { once: true });
     } else if ('speechSynthesis' in window) {
@@ -473,7 +479,9 @@ function initAudio() {
     $('audio-shuffle').addEventListener('change', resetAudio);
 
     $('btn-audio-reveal').addEventListener('click', () => {
-        toggleReveal('audio');
+        const shown = toggleReveal('audio');
+        const s = audioTab.list[audioTab.index];
+        if (shown && s && window.lessonOnReveal) lessonOnReveal(s);
     });
 
     $('btn-listen').addEventListener('click', () => {
@@ -551,8 +559,9 @@ function renderAudio() {
 function initRecall() {
     $('recall-shuffle').addEventListener('change', resetRecall);
     $('btn-reveal').addEventListener('click', () => {
-        toggleReveal('recall');
+        const shown = toggleReveal('recall');
         const s = recall.list[recall.index];
+        if (shown && s && window.lessonOnReveal) lessonOnReveal(s);
         if (s) playSentence(s, false);
     });
     $('btn-recall-prev').addEventListener('click', () => { stopAudio(); stepRecall(-1); });
