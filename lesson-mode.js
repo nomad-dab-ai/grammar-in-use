@@ -4,7 +4,7 @@
 
 const LESSON_TAGS = ['발음', '어순', '시제', '어휘', '관사/전치사', '유창성'];
 const lesson = {
-  active: false, passcode: '', sheetId: null,
+  active: false, passcode: '', auth: null, sheetId: null,
   studentName: '', courseId: '', teacherId: '', date: '',
   logged: {},        // sentence_id -> [tags]
   current: null,     // 현재 문장
@@ -21,6 +21,7 @@ const LOG_FLUSH_MS = 30000, LOG_FLUSH_N = 50;
 
 function lessonTrack(type, sid, extra) {
   if (!lesson.active || !lesson.logId) return;
+  lesson.lastActivity = Date.now();
   const ev = Object.assign({ t: Math.round((Date.now() - lesson.t0) / 100) / 10, type, sid }, extra || {});
   lesson.queue.push(ev);
   if (lesson.queue.length >= LOG_FLUSH_N) lessonFlush();
@@ -68,8 +69,9 @@ function lessonLogEnd(useBeacon) {
   const batch = lesson.queue.splice(0);
   if (useBeacon && navigator.sendBeacon) {
     // 창이 닫히는 중 — fetch는 취소될 수 있으니 beacon으로 보낸다
-    const body = JSON.stringify({ action: 'session_end', passcode: lesson.passcode,
-                                  log_id: lesson.logId, events: batch });
+    const body = JSON.stringify(Object.assign(
+      { action: 'session_end', log_id: lesson.logId, events: batch },
+      lesson.auth ? { auth: lesson.auth } : { passcode: lesson.passcode }));
     navigator.sendBeacon('/api/lesson', new Blob([body], { type: 'application/json' }));
   } else {
     lessonApi('session_end', { log_id: lesson.logId, events: batch })
@@ -86,40 +88,91 @@ window.lessonOnRepeat = s => lessonTrack('repeat', s.id);
 window.lessonOnReveal = s => lessonTrack('reveal', s.id);
 
 async function lessonApi(action, extra) {
+  const cred = lesson.auth ? { auth: lesson.auth } : { passcode: lesson.passcode };
   const res = await fetch('/api/lesson', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(Object.assign({ action, passcode: lesson.passcode }, extra || {})),
+    body: JSON.stringify(Object.assign({ action }, cred, extra || {})),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || ('오류 ' + res.status));
   return data;
 }
 
-/** 편집기(lesson-manager)에서 ?course=…&date=… 로 넘어온 컨텍스트 */
-function lessonUrlContext() {
+/** 발표(lesson-manager)에서 넘어온 핸드오프 컨텍스트 — 5종 전부 있어야 유효 */
+function lessonHandoffParams() {
   const q = new URLSearchParams(location.search);
-  const course = q.get('course');
-  const date = q.get('date');
-  const okDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date);
-  return { course: course || null, date: okDate ? date : null };
+  const course = q.get('course'), date = q.get('date'), sheet = q.get('sheet');
+  const exp = q.get('exp'), token = q.get('lmtoken');
+  if (!course || !date || !sheet || !exp || !token) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return { course, date, sheet, exp, token };
 }
 
-// ── 런처 버튼 + 패널 주입 ──
+// ── 진입 (2026-07-27 개편: 수동 토글 폐지 — 수업모드는 발표 핸드오프로만) ──
+// 복원 방법: 아래 lessonInit에서 lessonHandoffEnter() 대신 예전 런처 버튼 생성 +
+// lessonOpenSetup 연결을 되살리면 비밀번호 경로(API 존치)로 그대로 동작한다.
 function lessonInit() {
-  const btn = document.createElement('button');
-  btn.textContent = '수업 모드';
-  btn.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:900;padding:10px 16px;border:none;border-radius:999px;background:#1E3A8A;color:#fff;font-size:14px;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,.2);cursor:pointer';
-  btn.onclick = lessonOpenSetup;
-  document.body.appendChild(btn);
-  lesson.launcher = btn;
+  const p = lessonHandoffParams();
+  if (p) lessonHandoffEnter(p);
+  // 파라미터 없음/불완전 → 일반 모드 (수업모드 진입 수단 없음, 기록 0건)
+}
 
-  // 편집기에서 넘어왔으면 바로 수업 모드 설정을 띄운다 (비밀번호는 매번 입력)
-  const ctx = lessonUrlContext();
-  if (ctx.course) {
-    btn.textContent = '수업 모드 시작 →';
-    lessonOpenSetup();
+async function lessonHandoffEnter(p) {
+  lesson.auth = p;
+  try {
+    const data = await lessonApi('handoff', {});
+    lesson.sheetId = data.sheet_id;
+    lesson.logged = data.logged || {};
+    lesson.studentName = data.student_name;
+    lesson.courseId = p.course; lesson.date = p.date;
+    lesson.active = true;
+    lessonShowBanner();
+    lessonShowBar();
+    lessonLogStart();
+    lessonIdleWatchStart();
+    if (lesson.current) lessonOnSentence(lesson.current);
+  } catch (e) {
+    // 토큰 위조·만료·컨텍스트 불일치 → 수업모드 거부, 일반 모드 폴백
+    lesson.auth = null;
+    lessonToast('수업 연결이 유효하지 않아 일반 모드로 열렸습니다.');
+    console.warn('lesson handoff rejected:', e.message);
   }
+}
+
+function lessonToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:990;background:#7F1D1D;color:#fff;padding:8px 16px;border-radius:999px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.25)';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
+// ── 상단 상시 배너: 지금 기록되고 있음을 항상 보이게 ──
+function lessonShowBanner() {
+  if (lesson.banner) lesson.banner.remove();
+  const [, m, d] = lesson.date.split('-').map(Number);
+  const b = document.createElement('div');
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:920;background:#1E3A8A;color:#fff;padding:7px 16px;font-size:13px;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,.2)';
+  b.innerHTML = `<span>🔴 <b>${lesson.studentName}</b> · ${m}/${d} 수업 기록 중</span>
+    <button id="lm-banner-end" style="padding:3px 12px;border:1px solid rgba(255,255,255,.4);border-radius:999px;background:transparent;color:#fff;font-size:12px;cursor:pointer">종료</button>`;
+  document.body.appendChild(b);
+  document.body.style.paddingTop = '38px';
+  lesson.banner = b;
+  b.querySelector('#lm-banner-end').onclick = lessonEnd;
+}
+
+// ── 유휴 자동 종료 (설계안: 60분 무활동 시 세션 닫음 — 방치 탭의 오염 방지) ──
+const IDLE_LIMIT_MS = 60 * 60 * 1000;
+function lessonIdleWatchStart() {
+  lesson.lastActivity = Date.now();
+  lesson.idleTimer = setInterval(() => {
+    if (!lesson.active) return;
+    if (Date.now() - lesson.lastActivity > IDLE_LIMIT_MS) {
+      lessonEnd();
+      lessonToast('활동이 없어 수업 기록을 자동 종료했습니다. 다시 시작하려면 발표에서 재진입하세요.');
+    }
+  }, 60000);
 }
 
 function lessonOverlay(html) {
@@ -213,7 +266,6 @@ function lessonShowBar() {
         <div style="font-size:13px"><b>${lesson.studentName}</b> · ${lesson.date} <span style="color:#94A3B8">· 수업 모드</span></div>
         <div style="display:flex;align-items:center;gap:10px">
           <span id="lm-count" style="font-size:12px;color:#94A3B8"></span>
-          <button id="lm-end" style="padding:5px 12px;border:1px solid #334155;border-radius:8px;background:transparent;color:#CBD5E1;font-size:12px;cursor:pointer">종료</button>
         </div>
       </div>
       <div id="lm-tags" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
@@ -221,17 +273,20 @@ function lessonShowBar() {
   document.body.appendChild(bar);
   document.body.style.paddingBottom = '130px';
   lesson.bar = bar;
-  if (lesson.launcher) lesson.launcher.style.display = 'none';
-  bar.querySelector('#lm-end').onclick = lessonEnd;
   lessonUpdateCount();
 }
 
 function lessonEnd() {
   lessonLogEnd(false);                          // 잔여 이벤트 일괄 저장 + ended_at
   lesson.active = false;
+  lesson.auth = null;
+  if (lesson.idleTimer) { clearInterval(lesson.idleTimer); lesson.idleTimer = null; }
   if (lesson.bar) { lesson.bar.remove(); lesson.bar = null; }
+  if (lesson.banner) { lesson.banner.remove(); lesson.banner = null; }
   document.body.style.paddingBottom = '';
-  if (lesson.launcher) lesson.launcher.style.display = '';
+  document.body.style.paddingTop = '';
+  // 종료 후 새로고침해도 다시 수업모드로 들어가지 않게 핸드오프 파라미터 제거
+  try { history.replaceState(null, '', location.pathname); } catch (e) { /* no-op */ }
 }
 
 function lessonUpdateCount() {

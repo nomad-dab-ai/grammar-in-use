@@ -194,24 +194,84 @@ def _session_append(p, end=False):
     return 200, {'ok': True, 'count': len(events)}
 
 
+# ── 발표 핸드오프 토큰 (수동 토글 폐지 — 수업모드는 발표에서 들어온 경우에만) ──
+# lesson-manager가 발표 Review 링크에 심는 서명:
+#   token = HMAC_SHA256(TEACHER_PASSCODE, f"{course_id}|{date}|{sheet_id}|{exp}") hexdigest
+# exp = 유닉스 초. 검증 실패·만료·불일치는 전부 거부 → 클라이언트는 일반 모드 폴백.
+
+import hashlib
+
+
+def _token_ok(auth):
+    try:
+        course = str(auth['course']); date = str(auth['date'])
+        sheet = str(auth['sheet']); exp = int(auth['exp']); token = str(auth['token'])
+    except Exception:
+        return False
+    if time.time() > exp:
+        return False
+    msg = f'{course}|{date}|{sheet}|{exp}'.encode()
+    want = hmac.new(PASSCODE.encode(), msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(token, want)
+
+
+def _handoff(auth):
+    """토큰 검증 후 수업 컨텍스트 반환. 시트는 반드시 그 course+date의 것이어야 한다."""
+    course_id = auth['course']; date = auth['date']; sheet_id = auth['sheet']
+    st, sheets = _sb('GET', '/rest/v1/lesson_sheets?' +
+                     _q(select='id,course_id,session_date', id='eq.' + sheet_id))
+    if st >= 300 or not sheets:
+        return 400, {'error': '시트를 찾을 수 없습니다.'}
+    sh = sheets[0]
+    if sh['course_id'] != course_id or sh['session_date'] != date:
+        return 400, {'error': '수업 컨텍스트가 일치하지 않습니다.'}
+    st, courses = _sb('GET', '/rest/v1/courses?' + _q(select='student_id', id='eq.' + course_id))
+    if st >= 300 or not courses:
+        return 400, {'error': '수업을 찾을 수 없습니다.'}
+    st, students = _sb('GET', '/rest/v1/students?' + _q(select='name', id='eq.' + courses[0]['student_id']))
+    name = (students[0]['name'] if st < 300 and students else '수강생')
+    st, items = _sb('GET', '/rest/v1/lesson_practice_items?' +
+                    _q(select='sentence_id,error_tags,note', sheet_id='eq.' + sheet_id))
+    logged = {it['sentence_id']: {'tags': it.get('error_tags') or [], 'note': it.get('note') or ''}
+              for it in (items or []) if it.get('sentence_id')}
+    return 200, {'sheet_id': sheet_id, 'student_name': name, 'logged': logged}
+
+
 def handle(payload, ip):
     """수업 모드 요청 처리. (status, body) 반환."""
     if not SERVICE_KEY or not PASSCODE:
         return 500, {'error': '서버 환경변수(SUPABASE_SERVICE_ROLE_KEY, TEACHER_PASSCODE) 미설정'}
 
-    # 비밀번호 검증 (상수 시간 비교) + 무차별 대입 완화
     if _too_many_fails(ip):
         time.sleep(FAIL_DELAY_SEC)
         return 429, {'error': '시도가 너무 많습니다. 잠시 후 다시 시도해주세요.'}
 
-    if not hmac.compare_digest(str(payload.get('passcode', '')), PASSCODE):
-        _note_fail(ip)
-        time.sleep(FAIL_DELAY_SEC)   # 실패는 항상 느리게 — 대입 속도를 떨어뜨린다
-        return 401, {'error': '비밀번호가 올바르지 않습니다.'}
-    _clear_fail(ip)
-
     action = payload.get('action')
+    auth = payload.get('auth')
+
+    if auth is not None:
+        # 핸드오프 토큰 경로 (발표에서 들어온 수업모드)
+        if not _token_ok(auth):
+            _note_fail(ip)
+            time.sleep(FAIL_DELAY_SEC)
+            return 401, {'error': '수업 연결이 유효하지 않습니다.'}
+        _clear_fail(ip)
+        # 쓰기 대상 시트를 토큰의 시트로 강제 — 토큰으로는 다른 시트에 쓸 수 없다
+        if payload.get('sheet_id') and str(payload['sheet_id']) != str(auth['sheet']):
+            return 403, {'error': '토큰의 시트가 아닙니다.'}
+    else:
+        # 비밀번호 경로 (API 존치 — 수동 토글 UI는 제거됨, 복원 시 이 경로 그대로 사용)
+        if not hmac.compare_digest(str(payload.get('passcode', '')), PASSCODE):
+            _note_fail(ip)
+            time.sleep(FAIL_DELAY_SEC)   # 실패는 항상 느리게 — 대입 속도를 떨어뜨린다
+            return 401, {'error': '비밀번호가 올바르지 않습니다.'}
+        _clear_fail(ip)
+
     try:
+        if action == 'handoff':
+            if auth is None:
+                return 400, {'error': 'handoff에는 토큰이 필요합니다.'}
+            return _handoff(auth)
         if action == 'students': return _students()
         if action == 'sheet':    return _sheet(payload)
         if action == 'log':      return _log(payload)
