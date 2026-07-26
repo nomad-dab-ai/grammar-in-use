@@ -162,17 +162,36 @@ function lessonShowBanner() {
   b.querySelector('#lm-banner-end').onclick = lessonEnd;
 }
 
-// ── 유휴 자동 종료 (설계안: 60분 무활동 시 세션 닫음 — 방치 탭의 오염 방지) ──
-const IDLE_LIMIT_MS = 60 * 60 * 1000;
+// ── 유휴 자동 종료 (디렉터 승인: 120분 무활동 + 종료 1분 전 경고) ──
+// 실수업 90분 + 간헐 사용 특성 반영 — 수업 도중 조용한 종료(기록 누락)를 막는다.
+// 어떤 조작(클릭·터치·키)이든 활동으로 간주해 타이머를 되돌린다.
+const IDLE_LIMIT_MS = 120 * 60 * 1000;
+const IDLE_WARN_MS  = IDLE_LIMIT_MS - 60 * 1000;   // 종료 1분 전 경고
+
+function lessonMarkActivity() {
+  lesson.lastActivity = Date.now();
+  if (lesson.idleWarn) { lesson.idleWarn.remove(); lesson.idleWarn = null; }
+}
+
 function lessonIdleWatchStart() {
   lesson.lastActivity = Date.now();
+  const mark = () => { if (lesson.active) lessonMarkActivity(); };
+  ['click', 'keydown', 'touchstart'].forEach(ev =>
+    document.addEventListener(ev, mark, { passive: true }));
   lesson.idleTimer = setInterval(() => {
     if (!lesson.active) return;
-    if (Date.now() - lesson.lastActivity > IDLE_LIMIT_MS) {
+    const idle = Date.now() - lesson.lastActivity;
+    if (idle > IDLE_LIMIT_MS) {
       lessonEnd();
       lessonToast('활동이 없어 수업 기록을 자동 종료했습니다. 다시 시작하려면 발표에서 재진입하세요.');
+    } else if (idle > IDLE_WARN_MS && !lesson.idleWarn) {
+      const w = document.createElement('div');
+      w.textContent = '곧 수업 기록이 종료됩니다 — 계속하려면 화면을 터치';
+      w.style.cssText = 'position:fixed;top:46px;left:50%;transform:translateX(-50%);z-index:990;background:#B45309;color:#fff;padding:9px 18px;border-radius:999px;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.25)';
+      document.body.appendChild(w);
+      lesson.idleWarn = w;
     }
-  }, 60000);
+  }, 15000);
 }
 
 function lessonOverlay(html) {
@@ -281,6 +300,7 @@ function lessonEnd() {
   lesson.active = false;
   lesson.auth = null;
   if (lesson.idleTimer) { clearInterval(lesson.idleTimer); lesson.idleTimer = null; }
+  if (lesson.idleWarn) { lesson.idleWarn.remove(); lesson.idleWarn = null; }
   if (lesson.bar) { lesson.bar.remove(); lesson.bar = null; }
   if (lesson.banner) { lesson.banner.remove(); lesson.banner = null; }
   document.body.style.paddingBottom = '';
