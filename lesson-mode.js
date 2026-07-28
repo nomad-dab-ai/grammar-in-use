@@ -274,25 +274,65 @@ async function lessonOpenSetup() {
   };
 }
 
-// ── 하단 기록 바 ──
+// ── 하단 칠판 (L, 2026-07-28 승인) ─────────────────────────
+// 수업 중 판서용 오버레이. **저장하지 않는다** — DB·세션 귀속 없음, 내리거나
+// 나가면 사라진다. 덱 데이터를 건드리지 않으므로 발표·PPT 렌더에 무영향.
+// 기존 하단 "체크 + 오류 태그 + 메모" 바는 제거됐다(자동 기록 → 편집기에서 승격).
+// 복원: 아래 lessonShowBar 안의 예전 마크업(git 이력)과 lessonOnSentence의
+// 태그 렌더 블록을 되살리면 된다. 저장 함수(lessonLog 등)는 그대로 남아 있다.
+
+const BOARD_H = { closed: 34, half: 0.45, full: 0.8 };   // half·full은 화면 높이 비율
+
+function lessonBoardHeight(step) {
+  if (step === 'closed') return BOARD_H.closed;
+  return Math.round(window.innerHeight * BOARD_H[step]);
+}
+
 function lessonShowBar() {
   if (lesson.bar) lesson.bar.remove();
-  const bar = document.createElement('div');
-  bar.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:900;background:#0F172A;color:#fff;padding:10px 16px;box-shadow:0 -4px 12px rgba(0,0,0,.2);font-family:inherit';
-  bar.innerHTML = `
-    <div style="max-width:900px;margin:0 auto">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-        <div style="font-size:13px"><b>${lesson.studentName}</b> · ${lesson.date} <span style="color:#94A3B8">· 수업 모드</span></div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span id="lm-count" style="font-size:12px;color:#94A3B8"></span>
-        </div>
-      </div>
-      <div id="lm-tags" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
-    </div>`;
-  document.body.appendChild(bar);
-  document.body.style.paddingBottom = '130px';
-  lesson.bar = bar;
-  lessonUpdateCount();
+  const el = document.createElement('div');
+  el.id = 'lm-board';
+  el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:900;background:#fff;' +
+    'border-top:1px solid #E5E7EB;border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.12);' +
+    'transition:height .18s ease;height:' + BOARD_H.closed + 'px;font-family:inherit;overflow:hidden';
+  el.innerHTML = `
+    <div id="lm-board-handle" style="height:34px;display:flex;align-items:center;justify-content:center;cursor:grab;position:relative;touch-action:none">
+      <div style="width:54px;height:5px;border-radius:999px;background:#D1D5DB"></div>
+      <span style="position:absolute;right:16px;top:9px;font-size:11px;color:#9CA3AF">위로 끌어올리면 칠판 · 저장되지 않습니다</span>
+    </div>
+    <textarea id="lm-board-text" placeholder="여기에 적으면 학생 화면에 크게 보입니다 (저장되지 않습니다)"
+      style="display:none;width:100%;height:calc(100% - 34px);border:0;outline:none;resize:none;
+             padding:4px 40px 24px;font-family:inherit;font-size:34px;font-weight:700;line-height:1.5;color:#111827"></textarea>`;
+  document.body.appendChild(el);
+  lesson.bar = el;
+  lesson.boardStep = 'closed';
+  document.body.style.paddingBottom = BOARD_H.closed + 'px';
+
+  const ta = el.querySelector('#lm-board-text');
+  const setStep = (step) => {
+    lesson.boardStep = step;
+    el.style.height = lessonBoardHeight(step) + 'px';
+    ta.style.display = step === 'closed' ? 'none' : 'block';
+    document.body.style.paddingBottom = (step === 'closed' ? BOARD_H.closed : 0) + 'px';
+    if (step !== 'closed') setTimeout(() => ta.focus(), 180);
+  };
+  lesson.boardSet = setStep;
+
+  // 탭 = 한 단계 올리기(닫힘→반→전체→닫힘), 드래그 = 방향으로 단계 이동
+  const handle = el.querySelector('#lm-board-handle');
+  let startY = null;
+  handle.addEventListener('pointerdown', e => { startY = e.clientY; handle.setPointerCapture(e.pointerId); });
+  handle.addEventListener('pointerup', e => {
+    if (startY === null) return;
+    const dy = startY - e.clientY;
+    startY = null;
+    const order = ['closed', 'half', 'full'];
+    const i = order.indexOf(lesson.boardStep);
+    if (Math.abs(dy) < 12) setStep(order[(i + 1) % 3]);            // 탭
+    else setStep(order[Math.max(0, Math.min(2, i + (dy > 0 ? 1 : -1)))]);   // 드래그
+  });
+  // 타이핑도 활동으로 잡히도록 (유휴 감시는 document keydown을 듣는다)
+  ta.addEventListener('input', () => { lesson.lastActivity = Date.now(); });
 }
 
 function lessonEnd() {
@@ -308,6 +348,9 @@ function lessonEnd() {
   // 종료 후 새로고침해도 다시 수업모드로 들어가지 않게 핸드오프 파라미터 제거
   try { history.replaceState(null, '', location.pathname); } catch (e) { /* no-op */ }
 }
+
+// 아래 저장 함수들은 UI에서 내려갔지만 복원 가능하게 남긴다 (체크 UI 되살리면 그대로 동작).
+void lessonToggleDone; void lessonToggleTag; void lessonLog; void lessonEntry; void LESSON_TAGS;
 
 function lessonUpdateCount() {
   const el = lesson.bar && lesson.bar.querySelector('#lm-count');
@@ -333,34 +376,8 @@ function lessonOnSentence(s) {
     lesson.curSid = s.id;
     lesson.enterAt = Date.now();
   }
-  const tagsWrap = lesson.bar.querySelector('#lm-tags');
-  const entry = lessonEntry(s.id);
-  const logged = !!entry;
-  const tags = entry ? entry.tags : [];
-  const note = entry ? entry.note : '';
-
-  const doneBtn = `<button data-act="done" style="padding:4px 10px;border-radius:999px;border:1px solid ${logged ? '#22C55E' : '#334155'};background:${logged ? '#16A34A' : 'transparent'};color:${logged ? '#fff' : '#CBD5E1'};font-size:12px;cursor:pointer">${logged ? '✓ 완료' : '완료 표시'}</button>`;
-  const tagBtns = LESSON_TAGS.map(t => {
-    const on = tags.includes(t);
-    return `<button data-tag="${t}" style="padding:4px 10px;border-radius:999px;border:1px solid ${on ? '#F87171' : '#334155'};background:${on ? '#DC2626' : 'transparent'};color:${on ? '#fff' : '#94A3B8'};font-size:12px;cursor:pointer">${t}</button>`;
-  }).join('');
-  const memo = `<input id="lm-note" value="${note.replace(/"/g, '&quot;')}" placeholder="메모 (선택)" style="flex:1;min-width:140px;padding:4px 8px;border-radius:8px;border:1px solid #334155;background:#0B1220;color:#E2E8F0;font-size:12px" />`;
-
-  tagsWrap.innerHTML = doneBtn + tagBtns + memo;
-
-  tagsWrap.querySelector('[data-act="done"]').onclick = () => lessonToggleDone(s);
-  tagsWrap.querySelectorAll('[data-tag]').forEach(b => {
-    b.onclick = () => lessonToggleTag(s, b.getAttribute('data-tag'));
-  });
-  const noteEl = tagsWrap.querySelector('#lm-note');
-  noteEl.onblur = () => {
-    const v = noteEl.value.trim();
-    const cur = lessonEntry(s.id);
-    if (cur && cur.note === v) return;
-    lesson.logged[s.id] = { tags: cur ? cur.tags : [], note: v };
-    lessonUpdateCount();
-    lessonLog(s);                       // 저장은 뒤에서
-  };
+  // L: 하단 체크·태그·메모 UI 제거 — 문장별 기록은 수업 후 편집기에서
+  // "자동 기록 → 기록으로 승격"으로 남긴다(세션 로그는 계속 자동 수집된다).
 }
 
 // 아래 조작들은 화면을 먼저 바꾸고 저장은 뒤에서 한다.
