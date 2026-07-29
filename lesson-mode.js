@@ -298,9 +298,8 @@ function lessonShowBar() {
   el.innerHTML = `
     <div id="lm-board-handle" style="height:34px;display:flex;align-items:center;justify-content:center;cursor:grab;position:relative;touch-action:none">
       <div style="width:54px;height:5px;border-radius:999px;background:#D1D5DB"></div>
-      <span style="position:absolute;right:16px;top:9px;font-size:11px;color:#9CA3AF">위로 끌어올리면 칠판 · 저장되지 않습니다</span>
     </div>
-    <textarea id="lm-board-text" placeholder="여기에 적으면 학생 화면에 크게 보입니다 (저장되지 않습니다)"
+    <textarea id="lm-board-text" placeholder=""
       style="display:none;width:100%;height:calc(100% - 34px);border:0;outline:none;resize:none;
              padding:4px 40px 24px;font-family:inherit;font-size:34px;font-weight:700;line-height:1.5;color:#111827"></textarea>`;
   document.body.appendChild(el);
